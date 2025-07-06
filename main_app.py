@@ -33,20 +33,11 @@ class MainWindow(QMainWindow):
         # --- Configuration Check ---
         if config.NUM_CHANNELS <= 0:
             print("Error: config.NUM_CHANNELS must be greater than 0.")
-            # Optionally show an error dialog and exit
-            # QMessageBox.critical(self, "Config Error", "NUM_CHANNELS must be > 0 in config.py")
-            # sys.exit(1)
-            # For now, we'll proceed but DAQ/Processing might fail
 
         # --- Configuration Validation ---
         errors = []
-        # Allow FILTER_CUTOFF above Nyquist if desired (e.g., 580Hz) by skipping validation
-        # if not (0 < config.FILTER_CUTOFF < config.SAMPLE_RATE / 2):
-        #     errors.append("FILTER_CUTOFF must be between 0 and Nyquist (SAMPLE_RATE/2).")
         if config.MIN_FLIGHT_SAMPLES <= 0:
             errors.append("MIN_FLIGHT_SAMPLES must be positive.")
-        if config.MIN_CONTACT_SAMPLES <= 0:
-            errors.append("MIN_CONTACT_SAMPLES must be positive.")
         if errors:
             logging.error("Configuration validation failed: " + "; ".join(errors))
             self.show_error("Config validation error. See log.")
@@ -214,16 +205,10 @@ class MainWindow(QMainWindow):
         self.data_processor.jump_event_markers_signal.connect(self.plot_handler.add_event_markers)
 
         # Update button states AFTER connections are made
-        # NOTE: Reordered these from the original location
-        #       in __init__ to ensure they reflect the state
-        #       after connections (though the initial state is simple)
-        #       The original code moved some button state changes into _connect_signals,
-        #       but that seems incorrect. Button states should be set based on the
-        #       application's *current* state, not just after signals are connected.
-        self.btn_start.setEnabled(True) # Should be True initially?
-        self.btn_zero.setEnabled(True)  # Should be True initially?
-        self.btn_stop.setEnabled(False) # Set in __init__ already
-        self.btn_save.setEnabled(False) # Set in __init__ already
+        self.btn_start.setEnabled(True)
+        self.btn_zero.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.btn_save.setEnabled(False)
         
     @pyqtSlot(str, int)
     def update_calibration_status(self, message, countdown):

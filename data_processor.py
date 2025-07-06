@@ -54,7 +54,6 @@ class DataProcessor(QObject):
         self._force_buffer = []
         
         # Add real-time tracking
-        self._acquisition_start_time = None
         self._last_real_time = None
         
         # Wall-clock timestamp for creating real-time-based sample stamps
@@ -109,7 +108,6 @@ class DataProcessor(QObject):
         self._force_buffer = [] # Clear multi-channel force buffer
         
         # Reset real-time tracking
-        self._acquisition_start_time = None
         self._last_real_time = None
         
         # Reset real-time detection state
@@ -143,9 +141,6 @@ class DataProcessor(QObject):
             return
         # REAL-DAQ TIMING: measure actual callback interval
         now = time.time()
-        if self._last_real_time is not None:
-            dt_chunk = now - self._last_real_time
-            print(f"REAL_DAQ: dt since last chunk = {dt_chunk:.4f}s → ~{1/dt_chunk:.1f}Hz")
         self._last_real_time = now
         # 4. Generate time stamps based on real wall-clock time (spread chunk over actual interval)
         num_samples = raw_data_chunk.shape[0]
@@ -280,26 +275,9 @@ class DataProcessor(QObject):
                     recent_fz = full_fz_temp[-history_needed:] # Look at the last part
                     current_index = len(full_fz_temp) - 1
 
-                    # Update body weight estimate if we've collected more data
-                    if self._estimated_body_weight is None or self._estimated_body_weight <= 0:
-                        # Find sections that look like standing (relatively stable force)
-                        stable_regions = self._find_stable_regions(recent_fz, self.sample_rate)
-                        if len(stable_regions) > 0:
-                            bw_samples = []
-                            for start, end in stable_regions:
-                                if end-start > 0.05 * self.sample_rate:  # At least 50ms of stable data
-                                    bw_samples.extend(recent_fz[start:end])
-                            if len(bw_samples) > 10:
-                                self._estimated_body_weight = np.mean(bw_samples)
-                                self.status_signal.emit(f"Updated body weight estimate: {self._estimated_body_weight:.2f} N")
-
                     # Get the state of the *last* sample in the current chunk
                     # Always use the consistent threshold from config
                     flight_threshold = config.BODYWEIGHT_THRESHOLD_N
-                    
-                    # Print current force value and threshold for debugging
-                    if len(recent_fz) > 0:
-                        print(f"DEBUG: Current force: {recent_fz[-1]:.2f}N, Threshold: {flight_threshold:.2f}N, In flight: {self._in_flight}")
                     
                     # Check if current force is below threshold
                     is_below_threshold = len(recent_fz) > 0 and recent_fz[-1] < flight_threshold
@@ -436,32 +414,6 @@ class DataProcessor(QObject):
         
         return int(duration_seconds * effective_rate)
 
-    def _find_time_window_indices(self, time_array, start_time, duration_seconds):
-        """Find indices for a time window using wall-clock timestamps.
-        
-        Args:
-            time_array: Array of wall-clock timestamps
-            start_time: Starting timestamp
-            duration_seconds: Duration in seconds
-            
-        Returns:
-            (start_idx, end_idx) indices for the time window
-        """
-        if len(time_array) == 0:
-            return 0, 0
-        
-        # Find closest index to start time
-        start_idx = np.abs(time_array - start_time).argmin()
-        
-        # Find end time
-        end_time = start_time + duration_seconds
-        end_idx = np.abs(time_array - end_time).argmin()
-        
-        # Ensure end_idx is after start_idx
-        if end_idx <= start_idx:
-            end_idx = min(start_idx + 1, len(time_array) - 1)
-        
-        return start_idx, end_idx
 
     def get_full_data(self):
         """Returns the complete collected data as NumPy arrays.
@@ -495,11 +447,6 @@ class DataProcessor(QObject):
         if time_data_absolute is None or fz_data is None or len(time_data_absolute) < config.MIN_CONTACT_SAMPLES + config.MIN_FLIGHT_SAMPLES:
             note = "Not enough data for analysis."
             results[f'Jump #{jump_number} Analysis Note'] = note
-            # Insert debug of sample intervals here before any early returns
-            # DEBUG_SAMPLE_RATE: print the true dt & effective Hz
-            if time_data_absolute is not None and len(time_data_absolute) > 1:
-                dts = np.diff(time_data_absolute)
-                print(f"DEBUG_SAMPLE_RATE: mean dt = {np.mean(dts):.6f}s (std = {np.std(dts):.6f}s) => ~{1/np.mean(dts):.1f}Hz")
             
             # Clean up keys for failed analysis
             keys_to_remove = [k for k in results if k != f'Jump #{jump_number} Analysis Note']
@@ -508,10 +455,6 @@ class DataProcessor(QObject):
             return results
 
         try:
-            # DEBUG_SAMPLE_RATE: print actual sampling rate based on segment timestamps
-            if len(time_data_absolute) > 1:
-                dts = np.diff(time_data_absolute)
-                print(f"DEBUG_SAMPLE_RATE: mean dt = {np.mean(dts):.6f}s (std = {np.std(dts):.6f}s) => ~{1/np.mean(dts):.1f}Hz")
 
             # 1. Filter the Force Data for this segment
             # Pad slightly for filtfilt edge effects if possible, or accept minor edge artifact
@@ -531,14 +474,10 @@ class DataProcessor(QObject):
             flight_threshold = max(config.BODYWEIGHT_THRESHOLD_N, body_weight_n * 0.2)
             # Pass both filtered and unfiltered Fz data
             takeoff_indices, landing_indices = self._find_flight_phases(fz_data, fz_filtered, flight_threshold)
-            # ADDED DEBUG PRINT
-            print(f"DEBUG_IMPULSE: _find_flight_phases returned takeoff_indices = {takeoff_indices}, landing_indices = {landing_indices}")
 
             flight_detected = takeoff_indices.size > 0 and landing_indices.size > 0
 
             if not flight_detected:
-                # ADDED DEBUG PRINT
-                print(f"DEBUG_IMPULSE: Flight detection failed (flight_detected = {flight_detected})")
                 results[f'Jump #{jump_number} Analysis Note'] += " Incomplete/No flight phase. Searching manually..."
                 
                 # Manual detection - find regions where force is below threshold
@@ -572,15 +511,11 @@ class DataProcessor(QObject):
             if flight_detected:
                 # --- Analyze the first valid jump within the segment ---
                 first_takeoff_idx = takeoff_indices[0]
-                # ADDED DEBUG PRINT
-                print(f"DEBUG_IMPULSE: Extracted first_takeoff_idx = {first_takeoff_idx} (relative to segment)")
-                # Find the first landing *after* this takeoff
+                    # Find the first landing *after* this takeoff
                 valid_landing_indices = landing_indices[landing_indices > first_takeoff_idx]
 
                 if valid_landing_indices.size == 0:
-                     # ADDED DEBUG PRINT
-                     print(f"DEBUG_IMPULSE: No valid landing index found after takeoff index {first_takeoff_idx}")
-                     results[f'Jump #{jump_number} Analysis Note'] += " Takeoff no landing."
+                              results[f'Jump #{jump_number} Analysis Note'] += " Takeoff no landing."
                 else:
                     first_landing_idx = valid_landing_indices[0]
 
@@ -619,7 +554,6 @@ class DataProcessor(QObject):
                         landing_time = time_data_absolute[first_landing_idx]
 
                     flight_time = landing_time - takeoff_time
-                    print(f"DEBUG: Using timestamp-based flight time: {flight_time:.3f}s")
 
                     if flight_time < config.MIN_FLIGHT_TIME or flight_time > config.MAX_FLIGHT_TIME:
                         print(f"NOTICE: Timestamp-based flight time {flight_time:.3f}s outside expected range [{config.MIN_FLIGHT_TIME}, {config.MAX_FLIGHT_TIME}]")
@@ -629,25 +563,19 @@ class DataProcessor(QObject):
                     jump_height_m = (config.GRAVITY * flight_time**2) / 8.0
                     results[f'Jump #{jump_number} Jump Height (Flight Time) (m)'] = round(jump_height_m, 3)
 
-                    # ADDED DEBUG PRINT
-                    print(f"DEBUG_IMPULSE: Calculated flight time = {flight_time:.3f}s, flight height = {jump_height_m:.3f}m (timestamp-based)")
-
+        
                     # Find the beginning of the countermovement for impulse calculation
                     # Make sure first_takeoff_idx is not None and not 0 (to ensure there is data before takeoff)
                     if first_takeoff_idx is None or first_takeoff_idx < 10:
-                        print(f"DEBUG_IMPULSE: first_takeoff_idx = {first_takeoff_idx}, not enough data before takeoff")
                         results[f'Jump #{jump_number} Analysis Note'] += " Impulse calculation skipped (invalid takeoff index)."
                         # Set a default movement_start_idx_abs to avoid issues with marker creation
                         movement_start_idx_abs = 0
                     else:
                         # Use the full data up to takeoff for finding the countermovement start
                         search_range_onset = fz_filtered[:first_takeoff_idx]
-                        print(f"DEBUG_IMPULSE: search_range_onset size = {len(search_range_onset)}")
-                        print(f"DEBUG_IMPULSE: first_takeoff_idx = {first_takeoff_idx}, segment start index = 0, segment end index = {len(fz_filtered)}")
 
                         # Check if we have enough data before takeoff for a proper analysis
                         if len(search_range_onset) < 10:  # Need at least 10 samples before takeoff
-                            print(f"DEBUG_IMPULSE: Very limited data before takeoff ({len(search_range_onset)} samples). Using beginning of data.")
                             movement_start_idx_abs = 0  # Default to start of data segment
                             
                             # Even with limited data, try a basic impulse calculation
@@ -659,7 +587,6 @@ class DataProcessor(QObject):
                                 if len(full_movement_time) > 1:  # Need at least 2 samples for trapezoidal rule
                                     net_force_full = full_movement_force - body_weight_n
                                     net_impulse = np.trapz(net_force_full, full_movement_time)
-                                    print(f"DEBUG_IMPULSE: Limited data, but calculating impulse = {net_impulse:.3f} Ns")
                                     
                                     takeoff_velocity = net_impulse / mass
                                     jump_height_impulse_m = (takeoff_velocity**2) / (2 * config.GRAVITY)
@@ -678,7 +605,6 @@ class DataProcessor(QObject):
                                 results[f'Jump #{jump_number} Analysis Note'] += " Impulse calculation skipped (not enough data before takeoff)."
                         else:
                             # Sufficient data case: Use normal calculation
-                            print(f"DEBUG_IMPULSE: Checking flight_time > 0 ({flight_time > 0})")
                             if flight_time > 0:  # Ensure we have a valid flight time
                                 # Calculate jump height using flight time method (already done above)
                                 
@@ -692,7 +618,6 @@ class DataProcessor(QObject):
                                     movement_onset_idx = np.argmin(search_range_onset)
                                     
                                 # Calculate Impulse and Impulse-based Jump Height
-                                print(f"DEBUG_IMPULSE: Checking body_weight_n > 0 ({body_weight_n > 0})")
                                 if body_weight_n > 0:
                                     mass = body_weight_n / config.GRAVITY
                                     
@@ -719,13 +644,12 @@ class DataProcessor(QObject):
                                                 buffer_samples = self._find_time_window_samples(time_data_absolute, 0.1)
                                                 search_start_idx = min(calib_idx + buffer_samples, len(search_range_onset) - 1)
                                                 
-                                                print(f"DEBUG_IMPULSE: Using calibration completion point as search start (index {search_start_idx}, time {time_data_absolute[search_start_idx]:.3f}s)")
                                             else:
                                                 # Calibration happened before this segment
-                                                print(f"DEBUG_IMPULSE: Calibration occurred before this segment, starting from beginning")
                                                 search_start_idx = 0
                                         else:
-                                            print(f"DEBUG_IMPULSE: Empty time data segment, using default search start")
+                                            # Default case - start from beginning
+                                            search_start_idx = 0
                                     
                                     # Get the bodyweight threshold (5 SD below BW)
                                     # Using 5 SD as threshold based on research recommendation
@@ -742,7 +666,6 @@ class DataProcessor(QObject):
                                     
                                     # Calculate movement threshold (5 SD below BW)
                                     movement_threshold = body_weight_n - (SD_MULTIPLIER * calibration_sd)
-                                    print(f"DEBUG_IMPULSE: Movement Threshold: <{movement_threshold:.2f}N (BW={body_weight_n:.2f}N - {SD_MULTIPLIER}*SD={calibration_sd:.2f}N)")
                                     
                                     # Find first point where force drops below the threshold (moving forward in time)
                                     movement_start_idx = search_start_idx  # Default to search start if no crossing found
@@ -752,7 +675,6 @@ class DataProcessor(QObject):
                                         if search_range_onset[i] < movement_threshold:
                                             movement_start_idx = i
                                             movement_found = True
-                                            print(f"DEBUG_IMPULSE: Force first drops below {SD_MULTIPLIER}SD threshold at index {movement_start_idx}")
                                             break
                                     
                                     if movement_found:
@@ -763,10 +685,10 @@ class DataProcessor(QObject):
                                                 if (search_range_onset[i] <= body_weight_n and search_range_onset[i-1] > body_weight_n) or \
                                                    (search_range_onset[i] >= body_weight_n and search_range_onset[i-1] < body_weight_n):
                                                     movement_start_idx = i
-                                                    print(f"DEBUG_IMPULSE: Force crosses BW at index {movement_start_idx}")
                                                     break
                                     else:
-                                        print(f"DEBUG_IMPULSE: No movement detected below threshold. Using search start index: {search_start_idx}")
+                                        # No movement detected, use default
+                                        movement_start_idx = 0
                                     
                                     # Convert to absolute index in the full segment
                                     movement_start_idx_abs = movement_start_idx
@@ -792,19 +714,12 @@ class DataProcessor(QObject):
                         jump_start_time = time_data_absolute[movement_start_idx_abs]
                         jump_start_force = fz_filtered[movement_start_idx_abs]
                         
-                        print(f"DEBUG TIME DATA: movement_start_idx_abs = {movement_start_idx_abs}")
-                        print(f"DEBUG TIME DATA: time_data_absolute type = {type(time_data_absolute)}, shape = {time_data_absolute.shape}")
                         
                         # Print time values around the movement start index
                         start_idx = max(0, movement_start_idx_abs - 5)
                         end_idx = min(len(time_data_absolute), movement_start_idx_abs + 5)
                         time_slice = time_data_absolute[start_idx:end_idx]
                         
-                        print(f"DEBUG TIME DATA: time values around movement start:")
-                        for i, t in enumerate(time_slice):
-                            relative_idx = start_idx + i
-                            marker = " <-- MOVEMENT START" if relative_idx == movement_start_idx_abs else ""
-                            print(f"    time_data_absolute[{relative_idx}] = {t:.6f}{marker}")
                         
                         # Use precise interpolated values for takeoff and landing if available
                         if hasattr(self, '_takeoff_idx_precise') and self._takeoff_idx_precise >= 0:
@@ -817,7 +732,6 @@ class DataProcessor(QObject):
                             takeoff_time = time_data_absolute[takeoff_idx_floor] + frac * (time_data_absolute[takeoff_idx_ceil] - time_data_absolute[takeoff_idx_floor])
                             takeoff_force = config.BODYWEIGHT_THRESHOLD_N
                             
-                            print(f"DEBUG: Using interpolated takeoff time: {takeoff_time:.4f}s (force: {takeoff_force:.2f}N)")
                         else:
                             # Fallback to original method
                             takeoff_time = time_data_absolute[first_takeoff_idx]
@@ -834,7 +748,6 @@ class DataProcessor(QObject):
                             landing_time = time_data_absolute[landing_idx_floor] + frac * (time_data_absolute[landing_idx_ceil] - time_data_absolute[landing_idx_floor])
                             landing_force = config.BODYWEIGHT_THRESHOLD_N
                             
-                            print(f"DEBUG: Using interpolated landing time: {landing_time:.4f}s (force: {landing_force:.2f}N)")
                         else:
                             # Fallback to original method
                             landing_time = time_data_absolute[first_landing_idx]
@@ -851,38 +764,23 @@ class DataProcessor(QObject):
                             'landing_force': landing_force
                         }
                         
-                        # Add explicit debug output right before emitting
-                        print(f"MARKER DEBUG: Emitting markers with jump_start_time = {jump_start_time:.6f}")
-                        
                         # Verify values are as expected
                         if jump_start_time < 0.001:  # Almost zero
-                            print(f"MARKER DEBUG: WARNING - jump_start_time is suspiciously close to zero!")
                             # Try to get a more reasonable time value as a fallback
                             if movement_start_idx_abs > 0 and len(time_data_absolute) > movement_start_idx_abs:
                                 direct_time = float(time_data_absolute[movement_start_idx_abs])
-                                print(f"MARKER DEBUG: Force setting jump_start_time from {jump_start_time} to direct time {direct_time}")
                                 jump_start_time = direct_time
                                 event_markers['jump_start_time'] = direct_time
                                 
                         # Add markers for visualization
                         self.jump_event_markers_signal.emit(event_markers)
-                        print(f"DEBUG: Emitted jump event markers for jump #{jump_number} (actual calculated points)")
                         
-                        # Add textual markers for debugging purposes
-                        print(f"Added marker for Jump #{jump_number} jump_start at t={jump_start_time:.3f}s, F={jump_start_force:.1f}N")
-                        print(f"Added marker for Jump #{jump_number} takeoff at t={takeoff_time:.3f}s, F={takeoff_force:.1f}N")
-                        print(f"Added marker for Jump #{jump_number} landing at t={landing_time:.3f}s, F={landing_force:.1f}N")
-                        print(f"Adjusted view to show all jump markers: t=[{jump_start_time:.2f}, {landing_time:.2f}]")
-                    else:
-                        print(f"DEBUG: No event markers emitted - indices invalid or jump height not calculated")
-
                     # --- Continue with impulse calculations after emitting event markers ---
                     # This section starts with checking if we have enough data points for impulse calculation
                     if flight_time > 0 and body_weight_n > 0 and first_takeoff_idx is not None and first_takeoff_idx > 10:
                         if len(full_movement_time) > 10:  # Need enough samples
                             # Calculate total net impulse using trapezoidal rule
                             net_impulse = np.trapz(net_force_full, full_movement_time)
-                            print(f"DEBUG_IMPULSE: Net impulse calculation using ENTIRE movement = {net_impulse:.3f} Ns")
                             
                             # Calculate takeoff velocity from impulse
                             takeoff_velocity = net_impulse / mass
@@ -934,7 +832,6 @@ class DataProcessor(QObject):
         configured_min_flight_samples = int(config.MIN_FLIGHT_TIME * self.sample_rate)
         actual_min_samples = max(config.MIN_FLIGHT_SAMPLES, configured_min_flight_samples)
         
-        print(f"DEBUG: Flight detection with 20N threshold: {flight_threshold:.2f}N (unfiltered), 50N threshold: {transition_threshold:.2f}N (filtered)")
         
         # =====================================================================
         # TAKEOFF DETECTION (Unfiltered Data)
@@ -947,10 +844,8 @@ class DataProcessor(QObject):
                 break # Found the first crossing
         
         if takeoff_idx == -1:
-            print("DEBUG: No 20N downward crossing found in unfiltered data for takeoff")
             return np.array([]), np.array([])
         
-        print(f"DEBUG: Takeoff detected at index {takeoff_idx} (unfiltered force crosses < {flight_threshold:.1f}N)")
 
         # =====================================================================
         # LANDING DETECTION (Filtered 50N -> Unfiltered 20N)
@@ -963,7 +858,6 @@ class DataProcessor(QObject):
                 break  # We only need the first one
         
         if not landing_50N_crossings:
-            print("DEBUG: No 50N upward crossing found in filtered data after takeoff")
             # Return the takeoff index found, but no landing index
             # Interpolate takeoff before returning
             self._interpolate_takeoff(fz_data, takeoff_idx, flight_threshold)
@@ -971,7 +865,6 @@ class DataProcessor(QObject):
         
         # Get the 50N upward crossing index (from filtered data)
         idx_50N_up = landing_50N_crossings[0]
-        print(f"DEBUG: First 50N upward crossing (filtered) at index {idx_50N_up} (filtered force: {fz_filtered[idx_50N_up]:.2f}N)")
         
         # 2. Search BACKWARD from the 50N crossing to find the FIRST 20N crossing using UNFILTERED data
         landing_idx = idx_50N_up  # Default to the 50N crossing if no 5N crossing is found below
@@ -983,7 +876,6 @@ class DataProcessor(QObject):
         min_gap_samples = int(0.05 * self.sample_rate)  # 50ms after takeoff
         search_start = max(takeoff_idx + min_gap_samples, idx_50N_up - search_window_samples)
         
-        print(f"DEBUG: Searching backward from index {idx_50N_up} to {search_start} for 20N landing crossing (unfiltered)")
         
         for i in range(idx_50N_up, search_start, -1):
             # Check that we have a valid previous index and array bounds
@@ -992,14 +884,12 @@ class DataProcessor(QObject):
                 if fz_data[i-1] < flight_threshold and fz_data[i] >= flight_threshold:
                     landing_idx = i
                     found_5N_landing_crossing = True
-                    print(f"DEBUG: Found 20N landing crossing (unfiltered) at index {landing_idx} (unfiltered force: {fz_data[landing_idx]:.2f}N)")
                     break # Found the first one searching backward
         
         if not found_5N_landing_crossing:
-             print(f"DEBUG: No 20N crossing found (unfiltered) before 50N point. Using 50N crossing index {idx_50N_up} as landing point.")
-             # Keep landing_idx = idx_50N_up
+            # Keep landing_idx = idx_50N_up
+            pass
         
-        print(f"DEBUG: Final landing index: {landing_idx}")
 
         # Find precise takeoff and landing points using linear interpolation on UNFILTERED data
         self._interpolate_takeoff(fz_data, takeoff_idx, flight_threshold)
@@ -1017,7 +907,6 @@ class DataProcessor(QObject):
                 if takeoff_time_precise is not None and landing_time_precise is not None:
                     flight_time_precise = landing_time_precise - takeoff_time_precise
                     self._flight_time_precise = flight_time_precise
-                    print(f"DEBUG: Refined flight time: {flight_time_precise:.3f}s (using wall-clock interpolation)")
                     
                     # Only print a warning if flight time is outside expected range, but don't override the value
                     if flight_time_precise < config.MIN_FLIGHT_TIME or flight_time_precise > config.MAX_FLIGHT_TIME:
@@ -1027,12 +916,10 @@ class DataProcessor(QObject):
                     # Fallback to sample-rate method if wall-clock conversion fails
                     flight_time_precise = (self._landing_idx_precise - self._takeoff_idx_precise) / self.sample_rate
                     self._flight_time_precise = flight_time_precise
-                    print(f"DEBUG: Wall-clock conversion failed, using configured sample-rate method: {flight_time_precise:.3f}s")
             else:
                 # Fallback to sample-rate method if no time data available
                 flight_time_precise = (self._landing_idx_precise - self._takeoff_idx_precise) / self.sample_rate
                 self._flight_time_precise = flight_time_precise
-                print(f"DEBUG: No time data available, using configured sample-rate method: {flight_time_precise:.3f}s")
         else:
             # Fallback if interpolation failed somehow
             full_time, _ = self.get_full_data()
@@ -1044,17 +931,14 @@ class DataProcessor(QObject):
                 if takeoff_time is not None and landing_time is not None:
                     flight_time = landing_time - takeoff_time
                     self._flight_time_precise = flight_time
-                    print(f"DEBUG: Using non-interpolated wall-clock flight time: {flight_time:.3f}s")
                 else:
                     # Final fallback to sample-rate method
                     flight_time = (landing_idx - takeoff_idx) / self.sample_rate
                     self._flight_time_precise = flight_time
-                    print(f"DEBUG: Using non-interpolated configured sample-rate flight time: {flight_time:.3f}s")
             else:
                 # Final fallback to sample-rate method
                 flight_time = (landing_idx - takeoff_idx) / self.sample_rate
                 self._flight_time_precise = flight_time
-                print(f"DEBUG: Using non-interpolated configured sample-rate flight time: {flight_time:.3f}s")
                 
         # Return the raw indices found (interpolation happens internally and stores results)
         return np.array([takeoff_idx]), np.array([landing_idx])
@@ -1070,13 +954,10 @@ class DataProcessor(QObject):
                 # Interpolation for downward crossing: fraction of interval AFTER index
                 interp_fraction = (force_before - flight_threshold) / (force_before - force_after)
                 self._takeoff_idx_precise = (takeoff_idx - 1) + interp_fraction # Index is between i-1 and i
-                print(f"DEBUG: Precise takeoff index: {takeoff_idx} -> {self._takeoff_idx_precise:.3f} (interpolated on unfiltered)")
             else:
                  self._takeoff_idx_precise = float(takeoff_idx) # Landed exactly on threshold? Unlikely.
-                 print(f"DEBUG: Takeoff interpolation skipped (forces equal)")
         else:
             self._takeoff_idx_precise = float(takeoff_idx) # Cannot interpolate at edge
-            print(f"DEBUG: Takeoff interpolation skipped (edge case index {takeoff_idx})")
 
     def _interpolate_landing(self, fz_data, landing_idx, flight_threshold, found_5N_crossing):
         """Interpolates the precise landing index using unfiltered data, if 5N crossing was found."""
@@ -1090,14 +971,11 @@ class DataProcessor(QObject):
                 # Interpolation for upward crossing: fraction of interval AFTER index
                 interp_fraction = (flight_threshold - force_before) / (force_after - force_before)
                 self._landing_idx_precise = (landing_idx - 1) + interp_fraction # Index is between i-1 and i
-                print(f"DEBUG: Precise landing index: {landing_idx} -> {self._landing_idx_precise:.3f} (interpolated on unfiltered)")
             else:
                 self._landing_idx_precise = float(landing_idx)
-                print(f"DEBUG: Landing interpolation skipped (forces equal)")
         else:
             # If we didn't find 5N crossing or landed at edge, use the index we have (idx_50N_up) without interpolation
             self._landing_idx_precise = float(landing_idx)
-            print(f"DEBUG: Landing interpolation skipped (using index {landing_idx} directly, found_5N={found_5N_crossing})")
 
     def _interpolated_index_to_wallclock_time(self, interpolated_index, time_data):
         """Convert an interpolated index to wall-clock time using actual timestamps."""

@@ -5,7 +5,11 @@
       "Bash(grep:*)",
       "Bash(python:*)",
       "Bash(rm:*)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(find:*)",
+      "Bash(tail:*)",
+      "Bash(ls:*)",
+      "Bash(true)"
     ],
     "deny": []
   }

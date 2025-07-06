@@ -3,10 +3,7 @@ Handles communication with the Measurement Computing DAQ device.
 Uses a separate thread (QThread) for continuous background scanning to prevent
 GUI freezing.
 
-*** IMPORTANT NOTE ***
-This implementation currently SIMULATES DAQ behavior.
-Replace the sections marked with '# TODO: Replace with actual MCC library calls'
-with the appropriate functions from your installed `mcculw` or `uldaq` library.
+This implementation uses the mcculw library to interface with real DAQ hardware.
 """
 import time
 import numpy as np
@@ -20,66 +17,6 @@ from mcculw.device_info import DaqDeviceInfo
 
 import config # Import config to use constants
 from ctypes import c_double
-
-def generate_cmj_waveform(time_points, sample_rate, base_voltage,
-                          cycle_duration_s=5.0, jump_duration_s=1.5, flight_duration_s=0.3, # Added cycle/jump duration
-                          bw_factor=0.9, unweight_factor=0.3, peak_factor=2.5, landing_peak_factor=3.0):
-    """Generates a CMJ voltage waveform occurring once per cycle_duration_s."""
-    n_points = len(time_points)
-    waveform = np.ones(n_points) * base_voltage * bw_factor # Default to bodyweight
-    dt = 1.0 / sample_rate
-
-    # Ensure jump duration isn't longer than cycle duration
-    jump_duration_s = min(jump_duration_s, cycle_duration_s - 0.1)
-    jump_start_time_s = cycle_duration_s - jump_duration_s # Start jump towards end of cycle
-
-    # Define jump phase timings *relative* to the start of the jump within the cycle
-    active_jump_time = jump_duration_s - flight_duration_s # Time excluding flight
-    if active_jump_time <= 0.1: active_jump_time = jump_duration_s * 0.7 # Prevent zero/negative
-
-    t_unweight_end_rel = active_jump_time * 0.15
-    t_brake_peak_rel = active_jump_time * 0.40
-    t_propulsion_end_rel = active_jump_time * 0.75 # Takeoff point relative to jump start
-    t_flight_end_rel = t_propulsion_end_rel + flight_duration_s
-    t_land_peak_rel = t_flight_end_rel + active_jump_time * 0.05
-    t_settle_end_rel = t_flight_end_rel + active_jump_time * 0.25
-
-    # Voltages
-    unweight_v = base_voltage * unweight_factor
-    peak_brake_v = base_voltage * peak_factor
-    landing_peak_v = base_voltage * landing_peak_factor
-    body_weight_v = base_voltage * bw_factor
-
-    for i, t in enumerate(time_points):
-        t_in_cycle = t % cycle_duration_s # Time within the overall cycle
-
-        # Check if we are within the jump phase of the cycle
-        if t_in_cycle >= jump_start_time_s:
-            t_rel = t_in_cycle - jump_start_time_s # Time relative to jump start
-
-            if t_rel < t_unweight_end_rel:
-                progress = t_rel / t_unweight_end_rel
-                waveform[i] = body_weight_v + (unweight_v - body_weight_v) * np.sin(progress * np.pi / 2)
-            elif t_rel < t_brake_peak_rel:
-                progress = (t_rel - t_unweight_end_rel) / (t_brake_peak_rel - t_unweight_end_rel)
-                waveform[i] = unweight_v + (peak_brake_v - unweight_v) * np.sin(progress * np.pi / 2)
-            elif t_rel < t_propulsion_end_rel:
-                progress = (t_rel - t_brake_peak_rel) / (t_propulsion_end_rel - t_brake_peak_rel)
-                waveform[i] = peak_brake_v + (0 - peak_brake_v) * progress # Drop to zero V for takeoff
-            elif t_rel < t_flight_end_rel:
-                waveform[i] = 0.0 # Flight
-            elif t_rel < t_land_peak_rel:
-                progress = (t_rel - t_flight_end_rel) / (t_land_peak_rel - t_flight_end_rel)
-                waveform[i] = 0 + (landing_peak_v - 0) * np.sin(progress * np.pi/2)
-            elif t_rel < t_settle_end_rel:
-                 progress = (t_rel - t_land_peak_rel) / (t_settle_end_rel - t_land_peak_rel)
-                 waveform[i] = landing_peak_v + (body_weight_v - landing_peak_v) * np.sin(progress * np.pi/2)
-            else:
-                # Remainder of jump duration, settle back to BW
-                waveform[i] = body_weight_v
-        # else: Keep the default body_weight_v assigned at the start
-
-    return waveform
 
 class DAQWorker(QObject):
     """
@@ -288,9 +225,6 @@ class DAQHandler(QObject):
             # Ask the thread's event loop to exit gracefully.
             # It will emit its own 'finished' signal when done.
             self._thread.quit()
-            # Optional: Wait briefly for the thread to finish? Usually not needed with proper signal handling.
-            # if not self._thread.wait(500): # Wait 500ms
-            #    self.daq_error_signal.emit("DAQ thread did not finish quitting cleanly.")
 
     # This slot runs in the DAQHandler's thread
     @pyqtSlot()
@@ -298,17 +232,6 @@ class DAQHandler(QObject):
         """Called when the QThread itself has finished executing its event loop."""
         self.daq_status_signal.emit("DAQ Thread finished signal received. Cleaning up references.")
         
-        # Ensure worker object is deleted or cleaned up if necessary
-        # If the worker was moved to the thread without a parent, it might need manual deletion
-        # Or, if QThread manages its lifetime, this might be automatic.
-        # For safety, explicitly deleteLater if no parent was set for worker
-        # if self._worker:
-        #    self._worker.deleteLater() 
-            
-        # If the thread object itself needs deletion (if not parented)
-        # if self._thread:
-        #     self._thread.deleteLater()
-
         self._worker = None # Clear references
         self._thread = None 
         self.daq_status_signal.emit("DAQ Thread references cleared.")
@@ -334,19 +257,8 @@ class DAQHandler(QObject):
 
     def __del__(self):
         """Ensure cleanup on object deletion."""
-        print("DAQHandler __del__ called. Attempting cleanup...")
         # Request stop if scan is running, but don't block in __del__
         if self._thread and self._thread.isRunning():
             self.stop_scan() 
             # Consider if a brief wait is appropriate/safe here, but generally avoid blocking.
-        
-        # Optional: Release the DAQ device if required by UL
-        # This might be necessary if create_daq_device was used without ignore_instacal
-        # try:
-        #     ul.release_daq_device(self.board_num)
-        #     print(f"Released DAQ device {self.board_num}")
-        # except ULError as e:
-        #     print(f"Error releasing DAQ device {self.board_num} during cleanup: {e}")
-        # except Exception as e:
-        #     print(f"Unexpected error releasing DAQ {self.board_num}: {e}")
 

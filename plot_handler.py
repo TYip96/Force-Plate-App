@@ -40,14 +40,10 @@ class PlotHandler(QObject):
         self._plot_timer.timeout.connect(self._flush_pending)
         self._plot_timer.start()
         
-        # Track start time to ensure proper time scale
-        self._acquisition_start_time = None
         # Initialize Y-axis max for live plot and lock min at -20N
         self._y_max = config.PLOT_Y_AXIS_INITIAL_MAX
         self._y_min = -20  # Fixed Y-axis minimum with padding below x-axis
         
-        # Flag to prevent recursive range changes (REMOVED)
-        # self._updating_range = False 
         
         # Add event markers for jump analysis
         self._event_markers = {}
@@ -76,9 +72,6 @@ class PlotHandler(QObject):
         # Set up the ViewBox to limit Y-axis minimum value
         view_box = self.plot_item.getViewBox()
         view_box.setLimits(yMin=self._y_min)  # Lock Y-axis minimum
-        
-        # Connect to view range change signals (REMOVED)
-        # view_box.sigRangeChangedManually.connect(self._enforce_y_min)
         
         # Create plot curves (initially empty)
         self.plot_curves = []
@@ -109,10 +102,6 @@ class PlotHandler(QObject):
 
         self.clear_plot() # Ensure data buffers are initialized correctly
         
-    # Removed _enforce_y_min method
-    # def _enforce_y_min(self):
-    #     ...
-
     def set_view_mode(self, mode):
         """Switches between 'individual' and 'summed' plot views."""
         if mode not in ['individual', 'summed'] or not self.plot_item:
@@ -160,10 +149,6 @@ class PlotHandler(QObject):
 
         # Queue the chunk for throttled plotting
         self._pending_chunks.append((time_chunk, force_chunk_multi_channel))
-        
-        # Set acquisition start time if this is the first chunk
-        if self._acquisition_start_time is None and len(time_chunk) > 0:
-            self._acquisition_start_time = time_chunk[0]
 
     def clear_plot(self):
         """
@@ -176,8 +161,6 @@ class PlotHandler(QObject):
         # Clear any pending chunks
         self._pending_chunks.clear()
         self._last_time = 0.0
-        # Reset acquisition start time
-        self._acquisition_start_time = None
 
         # Clear visual data from all curves
         for curve in self.plot_curves:
