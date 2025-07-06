@@ -1,0 +1,330 @@
+﻿Calculation of Vertical Jump Height from Force Plate Data using the Impulse-Momentum Method
+1. Introduction
+Purpose
+This report provides a detailed, evidence-based guide for calculating vertical jump height (JH) from force plate data using the impulse-momentum theorem. This approach, frequently referred to as the Takeoff Velocity (ToV) method, is a cornerstone technique in biomechanics and sports science for assessing lower body neuromuscular function and athletic performance.1 The primary objective is to furnish developers implementing force plate analysis software with the necessary scientific background, mathematical formulas, signal processing steps, and practical considerations for accurate JH determination.
+Context
+Force platforms are widely regarded as a gold standard instrument for the kinetic analysis of human movement, including vertical jumps.2 They provide direct measurement of ground reaction forces (GRFs), enabling detailed insights into jump strategy and performance outcomes. However, the analysis of force-time data to estimate JH can be performed using multiple distinct methods.1 Variations in calculation methodology, signal processing techniques, and the definition of jump height itself can lead to significantly different results, potentially causing confusion or inappropriate comparisons if not applied and interpreted correctly.1 Differences of up to approximately 15 cm in calculated JH from the same jump have been reported when using different equations.1 This report focuses specifically on the impulse-momentum method, a physically principled approach widely utilized in research and practice.
+Target Audience Note
+This document is prepared with the understanding that the primary audience consists of software developers and engineers. Therefore, emphasis is placed on providing precise definitions, clear formulas, and unambiguous procedural steps necessary for accurate software implementation, grounded in peer-reviewed scientific literature.
+2. Calculating Jump Height via Impulse-Momentum (ToV Method)
+The calculation of jump height using the impulse-momentum theorem hinges on determining the athlete's vertical velocity at the instant they leave the force platform (takeoff). This takeoff velocity dictates the maximum height the center of mass (CoM) will reach during the subsequent flight phase, governed by the laws of projectile motion.
+2.1. The Impulse-Momentum Theorem in Vertical Jumps
+Fundamental Principle: The impulse-momentum theorem is a direct consequence of Newton's second law of motion. It states that the net impulse acting on an object equals the change in that object's momentum.1 Mathematically, for motion in one dimension (vertical), this is expressed as:
+∫ti​tf​​∑Fnet​(t)dt=mvf​−mvi​=Δp
+Where:
+* $ \int_{t_i}^{t_f} \sum F_{net}(t) dt $ is the net impulse (the integral of the net force over the time interval from ti​ to tf​).
+* $ \sum F_{net}(t) $ is the sum of all external forces acting on the object at time t.
+* $ m $ is the mass of the object.
+* $ v_f $ is the final velocity at time tf​.
+* $ v_i $ is the initial velocity at time ti​.
+* $ \Delta p $ is the change in momentum.
+Application: In the context of a vertical jump analyzed using a force platform, the primary external vertical forces acting on the jumper (the system) while in contact with the ground are the vertical ground reaction force (vGRF, denoted as Fz​) acting upwards, and the force due to gravity (Body Weight, BW) acting downwards. Therefore, the net vertical force is Fnet​(t)=Fz​(t)−BW. The impulse-momentum theorem allows us to calculate the change in the CoM's vertical momentum, and consequently its vertical velocity, by integrating this net vertical force over the duration of the ground contact phase relevant to propulsion.1
+2.2. Step 1: Calculating Net Vertical Impulse (NetIMP)
+Definition: The net vertical impulse (NetIMP) represents the accumulated effect of the force applied by the jumper in excess of their body weight over the time interval leading to takeoff. This is the impulse that causes a change in the CoM's vertical velocity relative to simply standing still.
+Formula: The net vertical impulse is calculated by integrating the net vertical force from the start of the jump movement (tstart​) to the instant of takeoff (ttakeoff​):
+NetIMP=∫tstart​ttakeoff​​(Fz​(t)−BW)dt
+Where:
+* Fz​(t) is the instantaneous vertical ground reaction force measured by the force plate at time t.
+* BW is the athlete's body weight (calculated as mass m times gravitational acceleration g). Accurate determination of BW is critical.9
+* tstart​ is the time point identified as the initiation of the jump movement (see Section 3.2).
+* ttakeoff​ is the time point identified as the instant of takeoff (see Section 3.3).
+Integration Method: Since force plate data consists of discrete measurements over time, numerical integration techniques are employed. The trapezoidal rule is commonly used and recommended for this purpose.9 This method approximates the area under the force-time curve by summing the areas of small trapezoids formed between consecutive data points.
+Integration Limits (Critical Detail): The accuracy of the calculated NetIMP is highly sensitive to the precise determination of the integration limits, tstart​ and ttakeoff​. These points define the duration over which the athlete applies the net force responsible for the upward propulsion. Standard practice involves integrating from the identified start of the movement through to the identified instant of takeoff.11 Some refined methods advocate starting the integration slightly before the detected movement onset 9 to ensure that the entire relevant force production period, including any initial subtle adjustments, is captured. The definition provided in 11 (30 ms before movement start) appears a reasonable safeguard.
+The calculation explicitly uses the net force (Fz​−BW). This is crucial because it represents the force component responsible for accelerating the CoM vertically, beyond simply counteracting gravity.11 The impulse-momentum theorem relates the net external force to the change in momentum. Gravity (BW) constantly acts downwards. The force plate measures the total upward reaction force (Fz​). Therefore, the net force causing the CoM's vertical acceleration is Fz​−BW. Integrating this net force yields the change in momentum that results in upward velocity at takeoff. Using the gross impulse (integrating only Fz​) would not directly provide the takeoff velocity needed for jump height calculation. Accurate implementation requires subtracting the athlete's body weight from the instantaneous vertical force signal before performing the numerical integration.
+2.3. Step 2: Calculating Takeoff Velocity (ToV) from Impulse
+Derivation: The impulse-momentum relationship (NetIMP=mΔv) directly links the calculated net vertical impulse to the change in vertical velocity. For jumps initiated from a stationary position (like a countermovement jump, CMJ, or squat jump, SJ), the initial vertical velocity at the start of the propulsive effort can be considered zero (or the net impulse calculation effectively accounts for the velocity changes from an initial zero-velocity state during quiet standing). Therefore, the change in vertical velocity (Δv) from the start of propulsion to takeoff corresponds directly to the vertical velocity at the instant of takeoff (vtakeoff​).
+Formula: The vertical velocity of the CoM at takeoff is calculated as:
+vtakeoff​=mNetIMP​
+Where:
+* vtakeoff​ is the vertical velocity of the CoM at the instant of takeoff. This variable is often denoted as ToV, wC​, or Vy​ in the literature.1
+* NetIMP is the net vertical impulse calculated in Step 1.
+* m is the athlete's body mass, derived from the measured body weight (m=BW/g).
+This formula is consistently supported across various sources employing the impulse-momentum approach.1 For instance, 7 and 1 provide the formula wC​=(∫∑Fdt)/m, assuming integration starts from a zero-velocity state. 11 describes calculating the velocity-time curve via integration (which inherently uses a=Fnet​/m) and applying the impulse-momentum method. 13 calculates takeoff velocity (Vy​) by integrating acceleration (a=(Fz​−BW)/m) over time, which is mathematically equivalent.
+2.4. Step 3: Calculating Jump Height from Takeoff Velocity (JH<sub>takeoff</sub>)
+Principle: Once the athlete's feet leave the force platform (t>ttakeoff​), they enter the flight phase. During this phase, neglecting air resistance (a standard assumption in jump analysis), the only significant force acting on the athlete's CoM is gravity. The CoM follows a parabolic trajectory. The maximum vertical height reached relative to the position at takeoff is determined solely by the initial vertical velocity (vtakeoff​) imparted at the moment of takeoff. This is derived from the equations of motion for constant acceleration: vf2​=vi2​+2ad. At the apex of the jump, the final vertical velocity (vf​) is zero, the initial vertical velocity (vi​) is vtakeoff​, the acceleration (a) is −g, and the displacement (d) is the jump height (JHtakeoff​). Solving for d gives the formula below.
+Formula: The jump height relative to the takeoff position is calculated as:
+JHtakeoff​=2gvtakeoff2​​
+Where:
+* JHtakeoff​ is the vertical displacement of the CoM from its position at the instant of takeoff to the apex (highest point) of the jump.1
+* vtakeoff​ is the takeoff velocity calculated in Step 2.
+* g is the acceleration due to gravity. Using a precise local value for g is ideal, although 9.81 m/s2 is commonly used. Small errors can arise if the standard value differs significantly from the local gravitational acceleration.9
+This formula is the standard equation for calculating jump height from takeoff velocity and is consistently presented in the literature.17 and 1 derive it as h=wC2​/2g. 13 uses H=Vy2​/2g. 21 and 17 use VJH=TOV2/2g. 18, and 4 use h=TOV2/(2g). 11 uses JH=vtakeoff2​/19.62, which is equivalent to vtakeoff2​/(2×9.81).
+Terminology: It is crucial to recognize that this method calculates the jump height achieved during the flight phase, measured relative to the CoM's vertical position at the instant of takeoff.1 This value is sometimes referred to as the "flight distance".19 It does not include any vertical displacement of the CoM that occurs prior to takeoff (e.g., rising onto the toes). This distinction is fundamental when comparing results from different calculation methods (see Section 4.3).
+3. Processing the Force-Time Signal
+Accurate calculation of NetIMP, vtakeoff​, and ultimately JHtakeoff​ relies heavily on correct processing of the raw vertical ground reaction force (Fz​) signal. This involves precise determination of body weight and the critical time points defining the jump phases, as well as appropriate handling of signal noise through filtering and ensuring adequate data sampling.
+3.1. Determining System Weight (Quiet Standing Phase)
+Purpose: An accurate measurement of the athlete's body weight (BW) is fundamental. It is required to calculate the net vertical force (Fz​−BW) used in the impulse calculation, and subsequently to determine the athlete's body mass (m=BW/g) needed to convert impulse to velocity.9 Errors in the BW measurement will systematically propagate through all subsequent calculations, potentially leading to significant inaccuracies in the final jump height value.12
+Method: Body weight is determined by averaging the vertical force (Fz​) signal recorded while the athlete stands perfectly still on the force platform(s) immediately prior to initiating the jump movement.9
+Duration: The duration of this quiet standing period should be sufficient to obtain a stable average. Recommendations vary:
+* 9/9 used 2 seconds as their reference standard for analysis, finding that averaging periods shorter than 1 second significantly increased random error (up to ±3.3% error at 0.1 s). They concluded that 1.0 or 1.5 seconds produced results within ±1% of the 2-second reference.
+* 25 and 24 specified 3 seconds and 2 seconds, respectively.
+* 11 used a 1-second averaging period.
+A duration of 1 to 2 seconds appears to be a common and reasonable choice, balancing stability with practicality.
+Stability Check: To ensure the athlete is truly standing still, some protocols incorporate a stability check, often by examining the standard deviation (SD) of the Fz​ signal during the averaging period. A low SD indicates minimal movement and a reliable BW measurement.9
+The practice of measuring body weight immediately prior to each jump trial 11, rather than just once at the beginning of a testing session, is important. An athlete's body mass can fluctuate slightly due to factors like hydration status or equipment worn. Using the BW measured just before a specific jump ensures that the most accurate value for that particular trial is used in the calculations. This minimizes the potential for error propagation stemming from temporal variations in the athlete's weight.12 Therefore, the software application should ideally incorporate a quiet standing phase before each recorded jump trial for BW determination.
+3.2. Identifying Jump Initiation (Start of Movement)
+Purpose: This time point, tstart​, defines the lower limit for the net impulse integration (NetIMP=∫tstart​ttakeoff​​(Fz​−BW)dt). Its accurate identification ensures that the entire force generation process relevant to the jump is captured in the impulse calculation. For a CMJ, this typically corresponds to the initiation of the downward unweighting phase. For an SJ, it corresponds to the start of the upward propulsive phase from a static squat position.
+Methods: Several algorithmic approaches exist:
+* Threshold Deviation from BW: This is a common method involving detecting when the Fz​ signal deviates significantly from the previously calculated BW.
+   * SD/Residual-Based Threshold: A threshold is set based on the noise level observed during the quiet standing phase. 9, and 14 describe searching forward from the start of the data for the first point where Fz​ deviates from BW by more than a multiple of the peak residual noise (e.g., 1.75 times the peak residual). Once this deviation is found, the algorithm searches backward in time until the Fz​ signal crosses back through the BW value. This crossing point is defined as tstart​.915 uses a similar concept but defines the threshold as 5 times the SD of BW during quiet standing.
+   * Fixed Newton Threshold: A simpler approach uses a fixed force drop below BW. 26 defines movement onset when the system mass is reduced by 20 N. 11 used a threshold of 5 SD below BW to define the start.
+* Velocity-Based Method: 13 defines the start of a block jump performance when the instantaneous velocity of the CoM (calculated via integration of acceleration) drops below zero, indicating the start of the downward countermovement. This requires calculating velocity first.
+Choosing the initiation detection method involves considering sensitivity and robustness. A very sensitive threshold (e.g., a small fixed N value or a low multiple of SD/residual) might be triggered by signal noise before actual movement begins, potentially including a small amount of irrelevant data in the integration. A less sensitive threshold might miss the very beginning of a slow unweighting phase, slightly shortening the integration period. The adaptive thresholds based on the signal's own noise characteristics (SD or peak residual) 9 appear frequently in detailed methodological studies and may offer greater robustness across different force platforms, athletes, and environmental noise levels compared to fixed N thresholds.26 Regardless of the method chosen, consistency in its application is paramount for reliable comparisons between jumps or individuals.
+3.3. Identifying the Instant of Takeoff (End of Ground Contact)
+Purpose: This time point, ttakeoff​, defines the upper limit for the net impulse integration and marks the transition from the ground contact phase to the flight phase. Accurate identification is critical for both the impulse (ToV) method and the flight time (FT) method.
+Methods: Takeoff occurs when the feet lose contact with the force platform, and the measured vertical force drops to the level recorded when the platform is unloaded (i.e., the offset or zero level). Due to signal noise, defining takeoff based on Fz​ dropping below a small, positive threshold is standard practice.
+* Fixed Near-Zero Force Threshold: Common thresholds include values like 5 N 11, 10 N 3, 20 N 11, or < 1 N.11 The algorithm identifies the first time point where Fz​ drops below this specified value. 38 used < 2 N.
+* Residual-Based Threshold: More adaptive methods base the threshold on the noise characteristics measured during the flight phase (when the platform is unloaded). 9/9 defined takeoff as the first intersection of Fz​ with a threshold slightly above the average offset voltage, determined by the offset plus the peak residual noise during a 0.4-second flight period, subsequently lowered by a minimal amount (2.4 mV or ~1 A/D unit). 11 and 15 also describe using thresholds based on flight phase noise (e.g., 5 times the SD of flight phase force 11 or the peak residual during flight 11). 14 used a similar residual-based approach based on Street et al. (2001).9
+Impact of Threshold Choice: The selection of the takeoff threshold influences the calculated impulse and subsequent variables.
+* 9/9 found that using thresholds significantly higher than the actual offset noise level led to earlier detection of takeoff. This resulted in a slight overestimation of jump height (≤ 1.5% in their tests) because less of the terminal propulsive phase was included in the integration, paradoxically leading to a higher calculated velocity. (Note: This interpretation aligns with their Figure 4, though it seems counterintuitive that less positive impulse yields higher velocity; careful re-reading suggests perhaps the net impulse calculation was affected differently, or their description of "overestimated" refers to deviation from their reference method).
+* 11 performed a direct comparison of thresholds ranging from <1 N to 50 N. They found statistically significant differences in mean JH, NetIMP, movement time (MT), and modified reactive strength index (RSImod) across the thresholds. However, the reliability (ICC) remained excellent for JH (>0.96) and NetIMP (>0.988) across all tested thresholds, suggesting that while the absolute values shift slightly, the relative ranking and consistency might be maintained if a threshold is applied consistently. The coefficient of variation (CV%) for NetIMP was very low (<3%) across thresholds, indicating high within-subject consistency.
+Theoretically, takeoff occurs when Fz​=0. Practically, signal noise necessitates using a small positive threshold.11 Using exactly 0 N could lead to premature takeoff detection if noise causes the signal to momentarily dip below zero before the feet have fully left the platform. A threshold slightly above the baseline noise level 9 provides a more robust detection mechanism. The key is consistency: the same threshold definition must be used for all jumps being compared. For implementation, an adaptive threshold based on flight phase noise 9 may be the most robust approach, but a well-justified small fixed threshold (e.g., 10 N) is also common practice.3
+3.4. Recommended Filtering Techniques and Parameters
+Purpose: The primary goal of filtering the force plate signal is to reduce noise (e.g., from electrical interference or vibrations) without distorting the true physiological signal, particularly the rapid changes in force that are characteristic of jumping movements.
+Filter Type: Low-pass filters are universally applied when filtering is deemed necessary. The Butterworth filter is frequently mentioned in the literature, often implemented as a second-order 9 or fourth-order 29 recursive filter. While other filters like Savitzky-Golay exist, Butterworth is a common choice for biomechanical signal processing.
+Cutoff Frequency (Critical): The choice of cutoff frequency is arguably the most critical parameter in signal processing for jump analysis and a major potential source of error.
+* Warning Against Low Cutoffs: Applying low-pass filters with cutoff frequencies typically used for kinematic data (e.g., 6-20 Hz) drastically attenuates the high-frequency components inherent in the vGRF signal during impact and propulsion. This smoothing effect significantly reduces calculated peak forces, alters the shape of the force-time curve, diminishes the calculated net impulse, and consequently leads to substantial underestimation of takeoff velocity and jump height.99, and 20 provided quantitative evidence: using a 6 Hz cutoff resulted in 26-31% underestimation of JH; a 14 Hz cutoff resulted in 11% underestimation; even a 180 Hz cutoff caused a 4.4% underestimation. Errors only became practically negligible (<1.2%) when cutoff frequencies were 27 Hz or higher in their specific tests, and non-significant only at 580 Hz or above.
+* Recommendation: Based on the significant errors introduced by conventional filtering, the strong recommendation from detailed error analyses 9 is to use unfiltered vertical ground reaction force data for impulse calculations whenever the signal quality allows. This approach avoids the signal distortion inherent in filtering. 25 also recommended using raw (unfiltered) data. If noise levels are unacceptably high and filtering is absolutely necessary, a very high cutoff frequency should be employed cautiously.9 The potential for underestimation even with high cutoffs should be acknowledged.
+* Contextual Clarification: It is important to distinguish filtering recommendations for vGRF impulse calculation from those used in other contexts. For instance, 29/30 used lower cutoffs (5 Hz, 15 Hz) for smoothing kinematic marker data derived from film analysis, and 28 used 4 Hz for filtering segmental kinematic data before differentiation to estimate GRF. These lower frequencies are appropriate for displacement data but not for the raw vGRF signal used directly in impulse calculations.
+The high-frequency content of the vGRF signal during a jump is not merely noise; it reflects the rapid physiological events occurring, such as the stretch-shortening cycle dynamics and forceful muscle contractions. Preserving this information is paramount for accurate kinetic analysis via the impulse method. Over-smoothing the data fundamentally alters the representation of these events, leading to invalid results. Therefore, the default approach in software implementation should be to utilize unfiltered data, providing filtering options only as a user-selectable alternative with clear warnings about potential inaccuracies and recommending very high cutoff frequencies if used.
+3.5. Recommended Sampling Frequency
+Requirement: The force platform must sample the vGRF signal at a sufficiently high rate to accurately capture the rapid changes in force occurring during the jump phases.
+Recommendations:
+* A sampling frequency of 1000 Hz is widely adopted and frequently recommended in the literature for jump analysis on force plates.5
+* Studies investigating the effect of sampling rate have shown that lower frequencies can lead to underestimation of jump height. 9, and 20 found that sampling at 180 Hz underestimated jump height by 4.4% compared to their reference (1080 Hz). While the underestimation decreased at higher rates (1.10% at 300 Hz, 0.32% at 900 Hz), they explicitly recommend using a sampling frequency of ≥ 1000 Hz to minimize these errors.
+The rationale for high sampling rates relates to temporal resolution. The vGRF changes extremely rapidly during a jump, particularly around the points of peak force, minimum force (unweighting), and the transitions between eccentric and concentric phases. A low sampling rate might fail to capture the true peak values or accurately represent the curve's shape between samples. This inaccuracy directly impacts the numerical integration process used to calculate impulse, leading to errors in NetIMP, vtakeoff​, and JHtakeoff​.9 A frequency of 1000 Hz is generally considered sufficient to provide the necessary temporal detail for robust analysis. Software applications should be designed to handle data sampled at this rate or higher. If processing data from systems with lower sampling rates is necessary, users should be aware of the potential for underestimation of jump height and related metrics.
+4. Understanding the "ToV Method" and Alternatives
+Clarity regarding terminology and the relationship between different calculation methods is essential for correct implementation and interpretation.
+4.1. Clarifying "ToV Method" Terminology
+In the context of force plate analysis, the term "Takeoff Velocity (ToV) method" specifically refers to the procedure of calculating jump height based on the vertical velocity of the CoM at the instant of takeoff, where this takeoff velocity is itself derived from the net vertical impulse using the impulse-momentum theorem.1
+Essentially, the "ToV method" is functionally synonymous with the "impulse-momentum method" when the goal is calculating jump height. The calculation pathway is:
+Net Impulse → Takeoff Velocity → Jump Height
+Various sources use these terms interchangeably or related terms to describe this process:
+* "Impulse-momentum method" 1
+* "Take-off velocity method (ToV)" 1
+* "Projectile formula" (when referring to calculating height from takeoff velocity) 13
+Therefore, the user's query regarding the "ToV method" directly corresponds to the impulse-momentum approach detailed in Section 2.
+4.2. Comparison with the Flight Time (FT) Method
+Another common method for calculating jump height from force plate data is the Flight Time (FT) method.
+FT Method Calculation: This method calculates jump height (JHFT​) based solely on the duration the athlete is airborne (tflight​), using the kinematic equation for projectile motion under gravity:
+JHFT​=8g×tflight2​​
+Where tflight​ is the time interval between the instant of takeoff and the instant of landing.1 Takeoff and landing times are typically identified using the same force threshold criteria employed for the ToV method (e.g., when Fz​ drops below and subsequently exceeds a small threshold).13
+Validity:
+* The impulse-momentum (ToV) method is generally considered to possess superior validity for determining jump height derived from takeoff kinetics.1 It is based directly on the physical principles governing the generation of velocity at takeoff.
+* The FT method's validity is fundamentally compromised by its core assumption: that the CoM's vertical position is identical at the instant of takeoff and the instant of landing.1 In practice, athletes almost always land with greater flexion in their lower limbs (ankles, knees, hips) than they had at takeoff to absorb the impact.3 This postural change means the CoM is lower at landing than at takeoff, effectively extending the duration of the flight phase (tflight​). Since JHFT​ is proportional to tflight2​, this leads to an artificial inflation or overestimation of the calculated jump height compared to the height actually achieved based on takeoff velocity.1
+Reliability:
+* The evidence regarding reliability (i.e., consistency of measurement) is somewhat mixed.
+   * Some reviews or studies suggest the FT method may exhibit slightly better within- or between-session reliability (often assessed using Intraclass Correlation Coefficients, ICC, or Coefficient of Variation, CV%).1 This is sometimes attributed to its reliance on only two discrete time points (takeoff and landing detection) rather than the more complex process of BW measurement, integration over time, and potential susceptibility to signal drift inherent in the impulse calculation.1
+   * However, other research explicitly states the impulse-momentum method is more reliable 19, or demonstrates excellent reliability for both methods when protocols are well-controlled.4 For example, 11 showed very high ICCs (>0.96) and low CV% (<6%) for JH calculated via impulse-momentum across various takeoff thresholds. 33 found similar reliability between JH derived from ToV and FT. Conversely, 8 reported that FT estimates had larger errors and were less reliable than other methods in their comparison. 3 found the impulse method (FP_IM) had a slightly higher ICC (0.96) than the FT method (FP_FT, ICC=0.95).
+* Overall reliability for both methods can be influenced by factors such as the strictness of protocol standardization (especially landing instructions for the FT method), the quality of the force plate system, and the proficiency of the software algorithms used for event detection.1
+Sensitivity to Errors:
+* ToV Method: Sensitive to errors in BW measurement, accuracy of tstart​ and ttakeoff​ detection, numerical integration procedures, and signal quality (filtering, sampling rate).1
+* FT Method: Highly sensitive to the accuracy of ttakeoff​ and tlanding​ detection, and particularly sensitive to variations in the athlete's landing posture.1 Asymmetric takeoff or landing can also introduce errors.19
+Recommended Use Cases:
+* ToV Method: Generally preferred when the highest accuracy based on takeoff kinetics is required, especially for unloaded jumps.1 It provides a measure directly linked to the propulsive effort.
+* FT Method: May be considered for within-athlete comparisons if testing protocols (especially landing) are kept highly consistent.1 Some suggest it might offer more reliable measurements for loaded jumps 1, although the validity concerns remain. It is the necessary method when using simpler devices like contact mats that only measure time in the air.22 If the FT method must be used (e.g., due to equipment limitations), providing clear instructions to the athlete to "land tall" or with extended legs can help minimize the landing posture artifact, though this may feel unnatural.8
+High reliability indicates measurement consistency, but not necessarily accuracy. The FT method might consistently measure an inflated flight time due to landing mechanics, resulting in a consistently inaccurate jump height (high reliability, low validity). The ToV method, while potentially susceptible to more minor sources of error if not implemented carefully, is based on a more fundamentally valid physical principle (impulse determines velocity) that is not inherently biased by landing strategy. Therefore, for obtaining an accurate representation of jump performance derived from the propulsive phase, the ToV method is generally the superior choice when using force platforms.
+Table 1: Comparison of ToV (Impulse) and FT Methods for JH<sub>takeoff</sub> Calculation
+
+
+Feature
+	ToV (Impulse-Momentum) Method
+	Flight Time (FT) Method
+	Calculation
+	JH=vtakeoff2​/(2g) via vtakeoff​=(∫(Fz​−BW)dt)/m
+	JH=(g×tflight2​)/8
+	Primary Input
+	Net vertical impulse (derived from Fz​(t), BW, tstart​, ttakeoff​)
+	Flight time (tflight​=tlanding​−ttakeoff​)
+	Validity
+	Generally considered higher 1
+	Lower due to landing posture assumption 1
+	Reliability
+	Generally good to excellent; mixed comparisons with FT 1
+	Generally good to excellent; mixed comparisons with ToV 1
+	Sensitivity
+	BW accuracy, integration limits, filtering/sampling 1
+	Landing posture, takeoff/landing detection 1
+	Typical Bias
+	Less prone to systematic overestimation
+	Prone to overestimation due to leg flexion on landing 3
+	Preference
+	Often preferred for accuracy with force plates 1
+	Used with contact mats; sometimes suggested for loaded jumps or within-subject tracking with consistent landing 1
+	4.3. Defining Jump Height: From Takeoff (JH<sub>takeoff</sub>) vs. From Standing (JH<sub>standing</sub>)
+A critical point of clarification is the definition of "jump height" itself, as different methods measure different vertical displacements.
+JH<sub>takeoff</sub> (Jump Height from Takeoff / Flight Distance):
+* Definition: Measures the vertical displacement of the CoM from its position at the instant of takeoff to the apex (peak height) of the jump.1
+* Calculation Methods: This is the quantity calculated directly by both the ToV (Impulse-Momentum) method and the Flight Time (FT) method.19
+* Interpretation: Represents the height gained purely due to the velocity achieved at takeoff, reflecting the effectiveness of the propulsive phase during flight.
+JH<sub>standing</sub> (Jump Height from Standing):
+* Definition: Measures the total vertical displacement of the CoM from its position during the initial quiet standing phase to the apex of the jump.1
+* Inclusion of Pre-Takeoff Rise: This definition includes the vertical displacement of the CoM that occurs before takeoff, primarily due to the extension of the ankles (plantarflexion) and potentially other joints as the body rises from the lowest point of the countermovement to the takeoff position.2 This pre-takeoff rise is often referred to as "heel-rise displacement."
+* Calculation Methods:
+   * Double Integration (DI or DIS): This method involves calculating the CoM's vertical acceleration from the net vertical force (a=(Fz​−BW)/m) and then numerically integrating the acceleration signal twice with respect to time to obtain the CoM's vertical displacement (s(t)) throughout the entire jump. JHstanding​ is then the maximum value of s(t) achieved during the flight phase relative to the initial standing position.1
+   * Takeoff Velocity plus Displacement (ToV+D or TOV+s): This method combines the ToV calculation with a separate calculation of the pre-takeoff displacement. First, JHtakeoff​ is calculated using the standard ToV method (vtakeoff2​/2g). Then, the vertical displacement of the CoM from the quiet standing position to the takeoff position (spre−takeoff​) is calculated (typically via double integration of the vGRF signal up to ttakeoff​). Finally, these two components are added: JHstanding​=JHtakeoff​+spre−takeoff​.1
+Magnitude Difference: Because JHstanding​ includes the pre-takeoff CoM rise, it will always yield a larger value than JHtakeoff​ for the same jump (unless there is somehow no rise before takeoff, which is unrealistic for CMJs). The magnitude of this difference can be substantial, with studies reporting differences ranging from a few centimeters up to approximately 15-19 cm, depending on the jump type and individual technique.1
+Pros and Cons:
+* JH<sub>takeoff</sub> (via ToV/FT):
+   * Pros: Calculation is relatively straightforward once vtakeoff​ or tflight​ is known. Directly reflects the outcome of the propulsive impulse during flight. Less susceptible to errors associated with double integration (baseline drift).1 Often preferred in research focusing specifically on flight mechanics or comparing impulse-derived metrics.19
+   * Cons: Does not represent the total vertical distance the CoM travels from the ground or standing start.
+* JH<sub>standing</sub> (via DI or ToV+D):
+   * Pros: Provides a measure of the total vertical displacement from a standardized starting position, which may be considered more representative of functional jump performance in an athletic context (i.e., how high the athlete gets relative to standing).1
+   * Cons: Methods involving double integration (either for the full displacement in DI, or for the spre−takeoff​ component in ToV+D) are highly susceptible to errors caused by baseline drift in the force signal or inaccuracies in determining initial conditions (initial velocity and position). These errors tend to accumulate during the integration process, potentially leading to significant inaccuracies, especially for longer duration movements like squat jumps where the integration period is extended.1 Requires careful signal processing to minimize drift.
+The choice between reporting JHtakeoff​ or JHstanding​ depends on the specific goals of the assessment. If the aim is to quantify the direct result of the takeoff velocity generated by the propulsive impulse, JHtakeoff​ (calculated via the ToV method) is appropriate and directly addresses the user's query. If the aim is to measure the total elevation relative to the ground, JHstanding​ is the target, but the calculation method (DI or ToV+D) and its associated challenges (integration drift) must be carefully considered. Given the user's focus on the "ToV method from impulse," the primary output should be JHtakeoff​. However, it is essential for the application and its documentation to clearly state which definition of jump height is being reported, and potentially offer JHstanding​ as an alternative calculation with appropriate caveats about its sensitivity to integration errors.
+Table 2: Summary of Key Point Identification Methods
+
+
+Event / Parameter
+	Purpose
+	Common Method(s)
+	Key Considerations / Sources
+	Body Weight (BW)
+	Calculate Net Force (Fz​−BW), Mass (m=BW/g)
+	Average Fz​ during quiet standing phase before jump
+	Duration: 1-2s recommended. Check stability (low SD). Measure before each jump. 9
+	Jump Initiation (tstart​)
+	Lower integration limit for NetIMP
+	Threshold deviation from BW (e.g., 1.75x peak residual or 5x SD), then backward search to BW crossing. Fixed N threshold (e.g., -20N).
+	SD/Residual method may be more robust. Consistency is key. 9
+	Takeoff (ttakeoff​)
+	Upper integration limit for NetIMP; Start of flight
+	Fz​ drops below small positive threshold (e.g., 5-10 N). Threshold based on flight phase noise (e.g., offset + peak residual/SD).
+	Avoid 0 N threshold due to noise. Higher threshold -> earlier detection -> potential JH overestimation (ToV). 3
+	5. Practical Considerations and Sources of Error
+Achieving accurate and reliable jump height calculations using the impulse-momentum method requires careful attention to several practical details and potential sources of error beyond the core formulas.
+5.1. Defining Integration Limits for Net Impulse (Revisited)
+As emphasized previously (Sections 2.2, 3.2, 3.3), the precise definition of the start (tstart​) and end (ttakeoff​) points for the net impulse integration (NetIMP=∫tstart​ttakeoff​​(Fz​−BW)dt) is paramount.
+* Start Point (tstart​): Consistency in the chosen method (e.g., adaptive SD/residual threshold with backward search 9 or a fixed N threshold 26) is crucial. Using a point slightly before the algorithmically detected start of movement (e.g., 30 ms prior 11) might provide a safety margin against missing the very initial force changes, although starting exactly at the detected point is also common practice.15
+* End Point (ttakeoff​): Similarly, consistent application of the takeoff detection threshold is vital. Using an adaptive threshold based on flight phase noise 9 likely offers the best robustness against variations in signal noise across different systems or environments. However, a well-justified small fixed threshold (e.g., 5 N or 10 N) is also widely used.3 The potential impact of threshold choice on the final result, although possibly small if consistent 11, underscores the need for careful implementation and documentation of the chosen method.
+5.2. Influence of Arm Swing
+Effect: The use of an arm swing during vertical jumps significantly enhances performance compared to jumps performed with arms restricted (e.g., held akimbo on the hips).39 Studies report that arm swing can increase jump height by substantial margins, for example, 18.7% in adult females and 22.6% in girls.39
+Mechanism: Arm swing contributes to increased jump height through several biomechanical mechanisms:
+1. Enhanced Leg Muscle Force Production: The downward swing of the arms during the countermovement phase, followed by a forceful upward swing during propulsion, can influence the dynamics of the lower limbs. It may allow the leg extensor muscles to contract at slower velocities during the critical propulsive phase, enabling them to operate closer to their optimal position on the force-velocity curve and thus generate greater force.39
+2. Energy/Momentum Transfer: The kinetic energy and upward momentum developed by the swinging arms can be transferred to the rest of the body near the instant of takeoff, effectively adding to the total upward momentum of the CoM.39
+3. Elevated Takeoff Position: The upward motion of the arms raises the overall position of the body's CoM at the instant of takeoff compared to an arms-restricted jump. This higher starting point for the flight phase directly contributes to a greater peak jump height relative to the ground.39
+Control Protocol: Because arm swing has such a significant impact on jump mechanics and outcomes, it is essential to standardize the arm condition during testing to ensure results are reliable and comparable. Common standardized protocols include:
+* Hands Akimbo: The athlete places their hands on their hips throughout the jump. This condition is often used to isolate the contribution of the lower limbs to jump performance.25
+* Natural Arm Swing: The athlete is instructed to use their arms freely, as they naturally would, to maximize jump height.3 This reflects a more functional, whole-body jumping action common in sports.
+The specific protocol used (akimbo vs. arm swing) must be clearly documented and consistently applied within a testing session and across different sessions if longitudinal tracking is intended.
+The impulse-momentum method itself remains valid regardless of whether arm swing is used. The calculation correctly incorporates the total vertical ground reaction force (Fz​), which reflects the combined contribution of legs and arms to the propulsion. However, the interpretation of the resulting jump height (JHtakeoff​) depends heavily on the arm condition. A jump performed with arm swing represents the integrated performance of the entire body, while an akimbo jump provides a more specific measure of lower extremity power generation capacity. Software applications should ideally allow users to record the arm condition used during testing to provide proper context for the results.
+5.3. Other Potential Error Sources
+Beyond integration limits and arm swing, several other factors can introduce errors into the impulse-based jump height calculation:
+* Body Weight Accuracy: As mentioned (3.1), even small errors in determining BW can propagate through the calculations.12 This emphasizes the need for accurate force plate calibration, stable quiet stance conditions for measurement, and measuring BW before each trial.912 notes a 0.5% error in mass can induce errors in JH.
+* Takeoff Threshold Selection: Inconsistent or poorly chosen takeoff thresholds affect the upper integration limit and thus NetIMP.9
+* Filtering and Sampling Rate: As detailed extensively (3.4, 3.5), inappropriate low-pass filtering (using low cutoff frequencies < 580 Hz) or inadequate sampling rates (< 1000 Hz) are major sources of systematic underestimation of jump height.9 Using unfiltered data sampled at ≥ 1000 Hz is the recommended approach to minimize these errors.9
+* Integration Method: While the choice between common numerical integration methods (e.g., trapezoidal rule vs. rectangular/histogram) was found to have a statistically significant but practically negligible effect (<0.3% difference) in one study 9, using a standard and well-implemented method like the trapezoidal rule is advisable.9
+* Force Plate Calibration and Leveling: Standard laboratory procedures dictate that force plates must be accurately calibrated according to manufacturer specifications and placed on a perfectly level and stable surface to ensure accurate force readings.
+* Offset Drift: Force plate signals can exhibit baseline drift over time. The "zero" reading when the plate is unloaded (offset) should be accounted for, particularly when determining net force and identifying takeoff. Calculating the offset during the unloaded flight phase, as done in 9/B2, can help account for any drift that occurred during the jump itself. 13 also notes the offset (F0​) in its impulse formula.
+* Countermovement Strategy: While not a calculation error per se, natural variations in an athlete's jump strategy—such as the depth of the countermovement, the timing of phases, or the shape of the force curve (unimodal vs. bimodal)—will influence the measured force-time profile and consequently the calculated impulse and jump height.15 Analyzing these strategic variables can provide deeper insights but requires consistent execution for reliable JH comparisons.
+A comprehensive error analysis by Street et al. (2001) 9 quantified many of these potential errors. They concluded that by adhering to recommended guidelines (unfiltered data or very high cutoff frequency, ≥1000 Hz sampling, ≥1s BW averaging, appropriate takeoff threshold), the total error in determining CMJ height using the impulse method could be reduced to approximately ±0.76%. Conversely, failing to follow these guidelines could lead to average errors as large as 26%.20
+Table 3: Summary of Potential Error Sources in Impulse Method JH Calculation & Mitigation Strategies
+
+
+Error Source
+	Potential Effect on JH<sub>takeoff</sub>
+	Mitigation Strategy
+	Supporting Sources
+	Inaccurate Body Weight (BW)
+	Systematic error (over/underestimation)
+	Accurate calibration; Stable quiet stance (1-2s); Measure BW before each jump.
+	9
+	Incorrect Jump Initiation (tstart​)
+	Affects NetIMP (over/underestimation)
+	Use consistent, robust method (e.g., SD/residual threshold + backward search). Consider starting integration slightly before detection.
+	9
+	Incorrect Takeoff (ttakeoff​)
+	Affects NetIMP (over/underestimation)
+	Use consistent, robust method (e.g., small positive threshold like 5-10N or adaptive flight noise threshold). Avoid 0 N.
+	3
+	Low-Pass Filtering (Low Cutoff)
+	Significant Underestimation
+	Use unfiltered data if possible. If filtering needed, use very high cutoff (>500 Hz) cautiously. Avoid kinematic cutoffs.
+	9
+	Low Sampling Frequency
+	Underestimation
+	Use sampling frequency ≥ 1000 Hz.
+	9
+	Integration Method Error
+	Negligible (if standard method used)
+	Use standard numerical integration (e.g., Trapezoidal Rule).
+	9
+	Force Plate Calibration/Level
+	Systematic error
+	Follow manufacturer calibration procedures; Ensure level surface.
+	General Best Practice
+	Offset Drift
+	Affects Net Force & Takeoff Detection
+	Account for offset, potentially by measuring during flight phase.
+	9
+	Inconsistent Arm Swing
+	Variable JH results
+	Standardize arm condition (akimbo or free swing) and document protocol.
+	25
+	6. Conclusion and Recommendations
+Calculating vertical jump height from force plate data using the impulse-momentum theorem (often termed the ToV method) provides a physically principled and widely accepted approach for assessing lower body power and jump performance. The method relies on accurately determining the net vertical impulse generated during the ground contact phase to calculate the velocity at takeoff, which in turn dictates the height achieved during flight (JHtakeoff​).
+The core calculation steps are:
+1. Determine Body Weight (BW): Average Fz​ during 1-2 seconds of quiet standing before the jump.
+2. Identify Jump Initiation (tstart​): Detect the start of movement using a consistent threshold method (e.g., SD/residual-based).
+3. Identify Takeoff (ttakeoff​): Detect when Fz​ drops below a consistent small positive threshold (e.g., 5-10 N or flight noise-based).
+4. Calculate Net Vertical Impulse (NetIMP): Numerically integrate the net vertical force (Fz​(t)−BW) from tstart​ to ttakeoff​ using the trapezoidal rule: NetIMP=∫tstart​ttakeoff​​(Fz​(t)−BW)dt.
+5. Calculate Takeoff Velocity (vtakeoff​): Divide the net impulse by the athlete's body mass (m=BW/g): vtakeoff​=NetIMP/m.
+6. Calculate Jump Height (JHtakeoff​): Use the takeoff velocity in the constant acceleration formula: JHtakeoff​=vtakeoff2​/(2g).
+Key Recommendations for Software Implementation:
+* Signal Acquisition and Processing:
+   * Prioritize using unfiltered vertical ground reaction force (Fz​) data sampled at ≥ 1000 Hz. This minimizes errors associated with signal distortion from filtering and inadequate temporal resolution.9
+   * If filtering is deemed essential due to excessive noise, implement a low-pass Butterworth filter but use a very high cutoff frequency (e.g., > 500 Hz) with caution, acknowledging the potential for underestimation.9 Provide clear warnings to the user if filtering is applied.
+* Event Detection Algorithms:
+   * Implement a robust and automated method for determining Body Weight (BW) from a stable quiet standing period (1-2 seconds) recorded immediately before each jump trial.9 Include stability checks (e.g., low SD).
+   * Employ a consistent and evidence-based algorithm for detecting Jump Initiation (tstart​). An adaptive threshold based on the quiet standing noise (SD or peak residual) with a backward search appears robust.9
+   * Use a consistent and reliable method for detecting Takeoff (ttakeoff​). A small positive threshold (e.g., 5-10 N) or an adaptive threshold based on flight phase noise is recommended over using exactly 0 N.3
+* Output and Interpretation:
+   * Clearly label the calculated jump height as being relative to takeoff (JHtakeoff​ or similar terminology like "Flight Height").
+   * Provide context or optional calculations for jump height relative to standing (JHstanding​), explaining the difference and the potential challenges (e.g., integration drift) associated with methods like double integration.1
+   * Allow users to document or select the arm swing condition (e.g., akimbo, free swing) used during testing, as this significantly impacts results and interpretation.39
+* Numerical Methods: Use the trapezoidal rule for numerical integration of the net force signal.9 Use an accurate value for gravitational acceleration (g).
+Final Thought: While the impulse-momentum (ToV) method provides a valid framework for assessing jump height 1, its accuracy in practice is critically dependent on meticulous attention to detail in data acquisition, signal processing, and the algorithmic identification of key events.9 By implementing the procedures and adhering to the recommendations outlined in this report, which are derived from peer-reviewed biomechanics literature, developers can create a scientifically sound and reliable tool for quantifying vertical jump performance from force plate data.
+Works cited
+1. The Battle of the Equations: A Systematic Review of Jump Height Calculations Using Force Platforms - PMC, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC11561012/
+2. The Battle of the Equations: A Systematic Review of Jump Height Calculations Using Force Platforms - Brage NIH, accessed April 25, 2025, https://nih.brage.unit.no/nih-xmlui/bitstream/handle/11250/3186589/Eythorsdottir%20SportsMed%202024.pdf?sequence=1&isAllowed=y
+3. Differences and Trial-to-Trial Reliability of Vertical Jump Heights Assessed by Ultrasonic System, Force-Plate, and High-Speed Video Analyses - Brieflands, accessed April 25, 2025, https://brieflands.com/articles/asjsm-12921
+4. Full article: Discrepancy Among Different Methods for Vertical Jump ..., accessed April 25, 2025, https://www.tandfonline.com/doi/full/10.1080/1091367X.2022.2163398
+5. The Validity of Hawkin Dynamics Wireless Dual Force Plates for Measuring Countermovement Jump and Drop Jump Variables - MDPI, accessed April 25, 2025, https://www.mdpi.com/1424-8220/23/10/4820
+6. The Validity of a Dual-Force Plate for Assessing Counter-Movement Jump Performance, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC11397850/
+7. (PDF) The Battle of the Equations: A Systematic Review of Jump Height Calculations Using Force Platforms - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/385079756_The_Battle_of_the_Equations_A_Systematic_Review_of_Jump_Height_Calculations_Using_Force_Platforms
+8. Comparing Numerical Methods to Estimate Vertical Jump Height Using a Force Platform, accessed April 25, 2025, https://www.researchgate.net/publication/335067729_Comparing_Numerical_Methods_to_Estimate_Vertical_Jump_Height_Using_a_Force_Platform
+9. Sources of Error in Determining Countermovement Jump Height with the Impulse Method, accessed April 25, 2025, https://www.researchgate.net/publication/235943133_Sources_of_Error_in_Determining_Countermovement_Jump_Height_with_the_Impulse_Method
+10. Single marker method to estimate center-of-mass velocity during vertical jumps - Journal of Physical Education and Sport, accessed April 25, 2025, https://efsupit.ro/images/stories/septembrie2021/Art%20331.pdf
+11. Comparison of Different Take-off Thresholds When Assessing Vertical Jump Performance, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC11166131/
+12. Understanding the key phases of the countermovement jump force-time curve - University of Chichester, accessed April 25, 2025, https://eprints.chi.ac.uk/3266/1/UNDERSTANDINGTHEKEYPHASESOFTHECOUNTERMOVEMENTJUMPFORCE-TIMECURVE.pdf
+13. pdfs.semanticscholar.org, accessed April 25, 2025, https://pdfs.semanticscholar.org/3a38/3ee8073e9d22e3e0122644a2d646fdd69c50.pdf
+14. Effects of Plyometric vs. Combined Plyometric Training on Vertical Jump Biomechanics in Female Basketball Players - Journal of Human Kinetics, accessed April 25, 2025, https://jhk.termedia.pl/pdf-158512-84800?filename=Effects%20of%20Plyometric%20vs..pdf
+15. A new approach to determining net impulse and identification of its characteristics in countermovement jumping: reliability and validity - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/279301544_A_new_approach_to_determining_net_impulse_and_identification_of_its_characteristics_in_countermovement_jumping_reliability_and_validity
+16. Changes in Body Mass and Movement Strategy Maintain Jump Height Immediately after Soccer Match - MDPI, accessed April 25, 2025, https://www.mdpi.com/2076-3417/13/12/7188
+17. Validation of an inertial measurement unit to determine countermovement jump height, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC6445523/
+18. Three Different Methods of Calculating Vertical Jump Height from ..., accessed April 25, 2025, https://www.tandfonline.com/doi/full/10.1080/10913670802349766
+19. (PDF) A Systematic Review of the Different Calculation Methods for Measuring Jump Height During the Countermovement and Drop Jump Tests - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/368654702_A_Systematic_Review_of_the_Different_Calculation_Methods_for_Measuring_Jump_Height_During_the_Countermovement_and_Drop_Jump_Tests
+20. Sources of Error in Determining Countermovement Jump Height with the Impulse Method in - Human Kinetics Journals, accessed April 25, 2025, https://journals.humankinetics.com/view/journals/jab/17/1/article-p43.xml
+21. Vertical Jump Height Estimation Using Low-Sampling IMU in Countermovement Jumps: A Feasible Alternative to Motion Capture and Force Platforms - MDPI, accessed April 25, 2025, https://www.mdpi.com/1424-8220/24/24/7877
+22. Three Different Methods of Calculating Vertical Jump Height from Force Platform Data in Men and Women - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/profile/Abdel-Rahman-Akl/post/How_do_you_calculate_jump_height_from_ground_reaction_forces_measured_on_a_force_platform/attachment/59d6285b79197b8077986bcc/AS%3A329911899312128%401455668534494/download/Three+Different+Methods+of+Calculating+Vertical+Jump+Height+from+Force+Platform+Data+in+Men+and+Women.pdf
+23. Full article: Methodological considerations in assessing countermovement jumps with handheld accentuated eccentric loading - Taylor & Francis Online, accessed April 25, 2025, https://www.tandfonline.com/doi/full/10.1080/14763141.2024.2374884
+24. (PDF) Ground Reaction Force Differences in the Countermovement Jump in Girls With Different Levels of Performance - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/258826456_Ground_Reaction_Force_Differences_in_the_Countermovement_Jump_in_Girls_With_Different_Levels_of_Performance
+25. A Comparison of Lower Body Power Characteristics Between Collegiate Athletes from Different Competition Levels - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/339596483_A_Comparison_of_Lower_Body_Power_Characteristics_Between_Collegiate_Athletes_from_Different_Competition_Levels
+26. Age-related biomechanical variations in vertical jumping and sprinting performance among basketball players - Frontiers, accessed April 25, 2025, https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1488128/full
+27. Position-specific differences in countermovement vertical jump force-time metrics in professional male basketball players - Frontiers, accessed April 25, 2025, https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2023.1218234/full
+28. Jumping towards field-based ground reaction force estimation and assessment with OpenCap - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/378862238_Jumping_towards_field-based_ground_reaction_force_estimation_and_assessment_with_OpenCap
+29. Possibilities and Limitations in the Biomechanical ... - Human Kinetics, accessed April 25, 2025, https://journals.humankinetics.com/downloadpdf/journals/jab/14/1/article-p105.pdf
+30. Possibilities and Limitations in the Biomechanical Analysis of Countermovement Jumps: A Methodological Study - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/283674442_Possibilities_and_Limitations_in_the_Biomechanical_Analysis_of_Countermovement_Jumps_A_Methodological_Study
+31. (PDF) Measurement Agreement Between Samozino's Method and Force Plate Force-Velocity Profiles During Barbell and Hexbar Countermovement Jumps - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/355769210_Measurement_Agreement_Between_Samozino's_Method_and_Force_Plate_Force-Velocity_Profiles_During_Barbell_and_Hexbar_Countermovement_Jumps
+32. Force Plate-Derived Countermovement Jump Normative Reference Values From Seven NCAA Division-I Power Five Men's College Basketball Teams | International Journal of Strength and Conditioning, accessed April 25, 2025, https://journal.iusca.org/index.php/Journal/article/view/354/384
+33. Reliability of and Relationship between Flight Time to Contraction Time Ratio and Reactive Strength Index Modified - PMC, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC6162366/
+34. Machine learning aided jump height estimate democratization through smartphone measures - Frontiers, accessed April 25, 2025, https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2023.1112739/full
+35. nih.brage.unit.no, accessed April 25, 2025, https://nih.brage.unit.no/nih-xmlui/bitstream/handle/11250/3186589/Eythorsdottir%20SportsMed%202024.pdf?sequence=1&isAllowed=y#:~:text=The%20scientific%20literature%20conveys%20that,flight%2Dtime%20approach%20(Eq.
+36. The Force Platform Project - Brage NIH, accessed April 25, 2025, https://nih.brage.unit.no/nih-xmlui/bitstream/handle/11250/3006538/I%20E%20T%20Eythorsdottir%20v22.pdf?sequence=1
+37. A Systematic Review of the Different Calculation Methods for Measuring Jump Height During the Countermovement and Drop Jump Test, accessed April 25, 2025, https://salford-repository.worktribe.com/OutputFile/1562088
+38. An analysis of two styles of arm action in the vertical countermovement jump - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/264090348_An_analysis_of_two_styles_of_arm_action_in_the_vertical_countermovement_jump
+39. (PDF) The Effect of Arm Action on the Vertical Jump Performance in Children and Adult Females - ResearchGate, accessed April 25, 2025, https://www.researchgate.net/publication/233999164_The_Effect_of_Arm_Action_on_the_Vertical_Jump_Performance_in_Children_and_Adult_Females
+40. COUNTERMOVEMENT JUMP HEIGHT: GENDER AND SPORT-SPECIFIC DIFFERENCES IN THE FORCE-TIME VARIABLES, accessed April 25, 2025, https://f.hubspotusercontent10.net/hubfs/8258665/Research/Publication%20-%20Laffaye%20-%202014%20-%20Countermovement%20jump%20height%20-%20gender%20and%20sports%20specific%20differences%20in%20the%20force-time%20variables.pdf
+41. LOWER EXTREMITY INTERSEGMENTAL COORDINATION CHANGES ACROSS COUNTERMOVEMENT JUMP HEIGHTS - QSpace, accessed April 25, 2025, https://qspace.library.queensu.ca/server/api/core/bitstreams/28ab9982-b22a-465a-836b-162fb47f3bee/content
+42. Predicting Time to Take-Off in a Countermovement Jump for Maximal Quickness from Upright and Squat Starting Positions, accessed April 25, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC9679178/
+43. countermovement jump height: Topics by Science.gov, accessed April 25, 2025, https://www.science.gov/topicpages/c/countermovement+jump+height.html

@@ -1,0 +1,5 @@
+PyQt6>=6.0.0
+numpy>=1.20.0
+scipy>=1.7.0
+pyqtgraph>=0.12.0
+mcculw>=1.0.0 
