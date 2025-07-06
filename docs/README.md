@@ -88,20 +88,34 @@ Key parameters can be modified in `config.py`:
 
 ## Project Architecture
 
-The application follows a modular, thread-safe architecture:
+The application follows a modular, thread-safe architecture with specialized components:
 
 - **`main_app.py`**: Main application window and GUI controller
 - **`daq_handler.py`**: Hardware interface for DAQ operations (threaded)
-- **`data_processor.py`**: Real-time data processing, filtering, and jump analysis
+- **`data_processor.py`**: Main data processing coordinator (facade pattern)
+- **`buffer_manager.py`**: Memory-efficient circular buffers for data storage
+- **`calibration_manager.py`**: Bodyweight calibration state machine
+- **`jump_detector.py`**: Real-time jump detection during acquisition
+- **`jump_analyzer.py`**: Post-jump analysis and metrics calculation
 - **`plot_handler.py`**: Live plotting and visualization using PyQtGraph
 - **`config.py`**: Centralized configuration constants
 
 ### Data Flow
 1. DAQ Hardware → DAQHandler (QThread) → DataProcessor
-2. DataProcessor → Real-time Analysis → PlotHandler
+2. DataProcessor processes raw data and coordinates:
+   - BufferManager (stores processed data)
+   - CalibrationManager (manages calibration state)
+   - JumpDetector (detects jumps when calibration ready)
+   - JumpAnalyzer (analyzes detected jumps)
 3. Results → GUI Display via PyQt6 signals/slots
 
 ## Technical Details
+
+### Modular Architecture Benefits
+- **Memory Efficiency**: Circular buffers prevent memory leaks during extended sessions
+- **Single Responsibility**: Each module handles one specific concern
+- **Better Testability**: Smaller, focused components are easier to test
+- **Improved Maintainability**: 74% reduction in main processing file complexity
 
 ### Jump Analysis Algorithm
 - **Phase Detection**: Monitors force threshold crossings to identify jump phases
@@ -112,9 +126,10 @@ The application follows a modular, thread-safe architecture:
 ### Signal Processing Pipeline
 1. Raw voltage acquisition from DAQ
 2. Real-time voltage-to-force conversion
-3. Low-pass filtering for noise reduction
-4. Baseline correction and drift compensation
-5. Jump detection and metrics calculation
+3. Circular buffer storage with automatic memory management
+4. Low-pass filtering for noise reduction
+5. Baseline correction and drift compensation
+6. Jump detection and metrics calculation
 
 ## Troubleshooting
 

@@ -12,13 +12,17 @@ The application follows a modular architecture with clear separation of concerns
 
 - **main_app.py**: Main application window and GUI controller that orchestrates all components
 - **daq_handler.py**: Hardware interface for DAQ operations using threaded data acquisition
-- **data_processor.py**: Real-time data processing, filtering, and jump analysis algorithms
+- **data_processor.py**: Main data processing coordinator (facade pattern)
+- **buffer_manager.py**: Memory-efficient circular buffers for data storage
+- **calibration_manager.py**: Bodyweight calibration state machine
+- **jump_detector.py**: Real-time jump detection during acquisition
+- **jump_analyzer.py**: Post-jump analysis and metrics calculation
 - **plot_handler.py**: Live plotting and visualization using PyQtGraph
 - **config.py**: Centralized configuration constants for hardware and analysis settings
 
 ### Key Data Flow
-1. DAQ hardware → DAQHandler (threaded) → DataProcessor → PlotHandler
-2. DataProcessor performs real-time analysis and emits results to GUI
+1. DAQ hardware → DAQHandler (threaded) → DataProcessor
+2. DataProcessor coordinates BufferManager, CalibrationManager, JumpDetector, and JumpAnalyzer
 3. All components communicate via PyQt6 signals/slots for thread safety
 
 ## Common Development Commands
@@ -77,6 +81,9 @@ The DAQ system uses blocking finite scans with the mcculw library:
 - The plotting system throttles updates to ~30 FPS for smooth visualization
 - Configuration validation occurs at startup to prevent runtime errors
 - Comprehensive error handling and logging throughout all components
+- **Memory Management**: Uses circular buffers to prevent memory leaks during extended sessions
+- **Modular Design**: Single responsibility principle with specialized modules
+- **Facade Pattern**: data_processor.py maintains external interface while delegating to modules
 
 ## Claude Code Workflow
 

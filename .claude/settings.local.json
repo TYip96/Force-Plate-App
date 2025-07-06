@@ -9,7 +9,11 @@
       "Bash(find:*)",
       "Bash(tail:*)",
       "Bash(ls:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(cp:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(tree:*)"
     ],
     "deny": []
   }

@@ -3,6 +3,10 @@ Main application window for the Force Plate DAQ and Analysis Tool.
 Integrates DAQ handling, data processing, plotting, and user interface.
 """
 import sys
+import os
+
+# Add the current directory to Python path so modules can find config
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
@@ -14,9 +18,9 @@ from PyQt6.QtCore import pyqtSlot, QTimer, Qt
 import logging
 
 import config
-from daq_handler import DAQHandler
-from data_processor import DataProcessor
-from plot_handler import PlotHandler
+from hardware.daq_handler import DAQHandler
+from processing.data_processor import DataProcessor
+from ui.plot_handler import PlotHandler
 
 logging.basicConfig(
     filename='force_plate_app.log',
