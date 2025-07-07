@@ -33,10 +33,10 @@ class PlotHandler(QObject):
         self.plot_buffer_time = None
         self.plot_buffer_forces = None
         self._last_time = 0.0  # Track the latest time point for view range
-        # Throttle plot updates: collect chunks and update at 20 FPS
+        # Throttle plot updates: collect chunks and update at 60 FPS
         self._pending_chunks = []
         self._plot_timer = QTimer(self)
-        self._plot_timer.setInterval(33)  # 33ms interval (~30 FPS) for smoother updates
+        self._plot_timer.setInterval(16)  # 16ms interval (~60 FPS) for smoother updates
         self._plot_timer.timeout.connect(self._flush_pending)
         self._plot_timer.start()
         
@@ -44,9 +44,89 @@ class PlotHandler(QObject):
         self._y_max = config.PLOT_Y_AXIS_INITIAL_MAX
         self._y_min = -20  # Fixed Y-axis minimum with padding below x-axis
         
+        # Track manual y-axis adjustments
+        self._user_adjusted_y_min = False  # Flag to track if user has manually adjusted y-axis minimum
+        self._acquisition_y_max = None  # Store y-max when acquisition stops
+        self._programmatic_range_change = False  # Flag to ignore programmatic range changes
         
         # Add event markers for jump analysis
         self._event_markers = {}
+        
+        # Full data storage for post-acquisition viewing
+        self._full_data_time = None
+        self._full_data_forces = None
+        self._using_full_data = False
+        
+    def _update_tick_spacing(self):
+        """Dynamically update X-axis tick spacing based on current view range."""
+        if not self.plot_item:
+            return
+            
+        # Get current X-axis view range
+        view_range = self.plot_item.viewRange()
+        x_min, x_max = view_range[0]
+        x_range = x_max - x_min
+        
+        # Calculate appropriate tick spacing based on range
+        if x_range <= 10:  # 0-10 seconds
+            major_spacing = 1.0
+            minor_spacing = 0.1
+        elif x_range <= 30:  # 10-30 seconds
+            major_spacing = 2.0
+            minor_spacing = 0.5
+        elif x_range <= 60:  # 30-60 seconds
+            major_spacing = 5.0
+            minor_spacing = 1.0
+        elif x_range <= 300:  # 1-5 minutes
+            major_spacing = 10.0
+            minor_spacing = 2.0
+        elif x_range <= 600:  # 5-10 minutes
+            major_spacing = 30.0
+            minor_spacing = 5.0
+        else:  # > 10 minutes
+            major_spacing = 60.0
+            minor_spacing = 10.0
+        
+        # Update tick spacing
+        x_axis = self.plot_item.getAxis('bottom')
+        x_axis.setTickSpacing(major=major_spacing, minor=minor_spacing)
+    
+    def _on_view_range_changed_wrapper(self, view_box, ranges):
+        """Wrapper to handle both tick spacing and y-axis enforcement."""
+        # Update tick spacing
+        self._update_tick_spacing()
+        
+        # Handle y-axis enforcement
+        self._on_view_range_changed(view_box, ranges)
+    
+    def _on_view_range_changed(self, view_box, ranges):
+        """Handle view range changes to track manual y-axis adjustments and enforce minimum."""
+        if self._programmatic_range_change:
+            return  # Ignore programmatic changes
+            
+        # Check if this is a manual change to the y-axis
+        y_min, y_max = ranges[1]  # ranges[1] is the y-axis range
+        
+        # Small tolerance for floating point comparison
+        tolerance = 0.1
+        
+        # If user hasn't manually adjusted y-min yet, enforce -20N minimum during zoom operations
+        if not self._user_adjusted_y_min:
+            if abs(y_min - self._y_min) > tolerance:
+                # Only mark as manual adjustment if the user drags the y-axis minimum well below -20N
+                # This is based on the assumption that users would only drag below -20N if they want to see more negative values
+                # Zoom operations that put y_min above -20N should always be corrected back to -20N
+                if y_min < self._y_min - 10.0:  # User dragging below -30N is probably deliberate
+                    self._user_adjusted_y_min = True
+                    print(f"User manually adjusted y-axis minimum from {self._y_min} to {y_min}")
+                else:
+                    # Always enforce -20N minimum for zoom operations or minor adjustments
+                    self._programmatic_range_change = True
+                    try:
+                        self.plot_item.setYRange(self._y_min, y_max, padding=0)
+                        print(f"Enforced y-axis minimum: {self._y_min} (was {y_min})")
+                    finally:
+                        self._programmatic_range_change = False
         
     def setup_plot(self, num_channels):
         """Initializes the plot appearance and data structures for multi-channel data."""
@@ -64,14 +144,37 @@ class PlotHandler(QObject):
         self.plot_item.setLabel('left', "Force", units='N')
         self.plot_item.setLabel('bottom', "Time", units='s')
         self.plot_item.setTitle("Live Force Data - Summed Channels")
+        
+        # Set up dynamic tick spacing for x-axis to prevent overlapping labels
+        x_axis = self.plot_item.getAxis('bottom')
+        x_axis.enableAutoSIPrefix(False)
+        
+        # Custom formatter with dynamic precision based on tick spacing
+        def format_time_ticks(values, scale, spacing):
+            # Determine precision based on spacing
+            if spacing >= 1.0:
+                precision = 0  # No decimals for large spacings
+            elif spacing >= 0.1:
+                precision = 1  # 1 decimal for medium spacings
+            else:
+                precision = 2  # 2 decimals for small spacings
+            return [f"{v:.{precision}f}" for v in values]
+        
+        x_axis.tickStrings = format_time_ticks
+        
+        # Connect to view range changes to update tick spacing dynamically and handle y-axis enforcement
+        view_box = self.plot_item.getViewBox()
+        view_box.sigRangeChanged.connect(self._on_view_range_changed_wrapper)
+        
+        # Set initial tick spacing
+        self._update_tick_spacing()
 
         # Enable mouse interaction
         self.plot_item.setMouseEnabled(x=True, y=True)
         self.plot_item.showGrid(x=True, y=True)
         
-        # Set up the ViewBox to limit Y-axis minimum value
-        view_box = self.plot_item.getViewBox()
-        view_box.setLimits(yMin=self._y_min)  # Lock Y-axis minimum
+        # Set up the ViewBox to limit Y-axis minimum value and X-axis minimum
+        view_box.setLimits(yMin=self._y_min, xMin=0)  # Lock Y-axis minimum and X-axis minimum at 0s
         
         # Create plot curves (initially empty)
         self.plot_curves = []
@@ -123,10 +226,18 @@ class PlotHandler(QObject):
                 self.plot_curves[i].setVisible(False)
             self.plot_curves[self.num_channels].setVisible(True) # Show sum curve
 
+        # Update plot data if using full data mode
+        if self._using_full_data:
+            self._update_plot_with_full_data()
+        
         # Maintain Y-axis locked range [_y_min, current max]
         self.plot_item.enableAutoRange('y', False)
         # Set Y range without _updating_range flag
-        self.plot_item.setYRange(self._y_min, self._y_max)
+        self._programmatic_range_change = True
+        try:
+            self.plot_item.setYRange(self._y_min, self._y_max)
+        finally:
+            self._programmatic_range_change = False
 
     @pyqtSlot(np.ndarray, np.ndarray) # Expecting time_chunk (1D), force_chunk_multi (2D: chunk_size, num_channels)
     def update_plot(self, time_chunk, force_chunk_multi_channel):
@@ -161,6 +272,15 @@ class PlotHandler(QObject):
         # Clear any pending chunks
         self._pending_chunks.clear()
         self._last_time = 0.0
+        
+        # Clear full data storage and reset to ring buffer mode
+        self._full_data_time = None
+        self._full_data_forces = None
+        self._using_full_data = False
+        
+        # Reset y-axis adjustment tracking for new acquisition
+        self._user_adjusted_y_min = False
+        self._acquisition_y_max = None
 
         # Clear visual data from all curves
         for curve in self.plot_curves:
@@ -176,15 +296,27 @@ class PlotHandler(QObject):
             # Reset Y-axis to fixed initial range [_y_min, initial max]
             self._y_max = config.PLOT_Y_AXIS_INITIAL_MAX
             self.plot_item.enableAutoRange('y', False)
-            self.plot_item.setYRange(self._y_min, self._y_max)
+            self._programmatic_range_change = True
+            try:
+                self.plot_item.setYRange(self._y_min, self._y_max)
+            finally:
+                self._programmatic_range_change = False
             
-            # Ensure Y-axis minimum limit is set
+            # Ensure Y-axis minimum limit and X-axis minimum limit are set
             view_box = self.plot_item.getViewBox()
-            view_box.setLimits(yMin=self._y_min)
+            view_box.setLimits(yMin=self._y_min, xMin=0)
+            
+            # Update tick spacing for the reset view
+            self._update_tick_spacing()
 
     def _flush_pending(self):
         """Process queued chunks and update the visible curves."""
         if not self._pending_chunks:
+            return
+        
+        # Don't update with ring buffer data if we're in full data mode
+        if self._using_full_data:
+            self._pending_chunks.clear()
             return
         # Only use the most recent chunk to keep UI at target FPS and avoid backlog
         time_chunk, force_chunk_multi = self._pending_chunks[-1]
@@ -222,16 +354,107 @@ class PlotHandler(QObject):
                 current_max = max((max(self.plot_buffer_forces[i]) for i in idxs if self.plot_buffer_forces[i]), default=0)
                 if current_max > self._y_max:
                     self._y_max = current_max * 1.1  # Add 10% padding
-                    self.plot_item.setYRange(self._y_min, self._y_max)  # Update range while keeping minimum fixed
+                    self._programmatic_range_change = True
+                    try:
+                        self.plot_item.setYRange(self._y_min, self._y_max)  # Update range while keeping minimum fixed
+                    finally:
+                        self._programmatic_range_change = False
+    
+    def store_acquisition_y_max(self):
+        """Store the current y-axis maximum when acquisition stops."""
+        self._acquisition_y_max = self._y_max
+        print(f"Stored acquisition y-max: {self._acquisition_y_max}")
                     
     def reset_view(self):
-        """Resets the plot view to the initial X and Y ranges."""
-        if self.plot_item:
-            self._y_max = config.PLOT_Y_AXIS_INITIAL_MAX # Reset Y max too
-            self.plot_item.enableAutoRange('x', False)
-            self.plot_item.enableAutoRange('y', False)
-            self.plot_item.setXRange(0, config.PLOT_WINDOW_DURATION_S, padding=0.01)
-            self.plot_item.setYRange(self._y_min, self._y_max, padding=0) # Reset Y with fixed min 
+        """Resets the plot view y-axis to -20N minimum and acquisition maximum, without affecting x-axis."""
+        if not self.plot_item:
+            return
+            
+        # Reset user adjustment flag so y-axis minimum enforcement works again
+        self._user_adjusted_y_min = False
+        
+        # Determine the y-axis maximum to use
+        if self._acquisition_y_max is not None:
+            # Use the stored acquisition maximum
+            reset_y_max = self._acquisition_y_max
+        elif self._using_full_data and self._full_data_forces is not None:
+            # Calculate from full data if no acquisition max is stored
+            if self.current_view_mode == 'summed':
+                # Sum all channels
+                summed_forces = np.sum(self._full_data_forces, axis=1)
+                reset_y_max = max(summed_forces) * 1.1 if len(summed_forces) > 0 else config.PLOT_Y_AXIS_INITIAL_MAX
+            else:
+                # Individual channels
+                reset_y_max = np.max(self._full_data_forces) * 1.1 if self._full_data_forces.size > 0 else config.PLOT_Y_AXIS_INITIAL_MAX
+        else:
+            # Use current y-max as fallback
+            reset_y_max = self._y_max
+            
+        # Update the stored y-max
+        self._y_max = reset_y_max
+        
+        # Reset only the y-axis range, leaving x-axis unchanged
+        self.plot_item.enableAutoRange('y', False)
+        self._programmatic_range_change = True
+        try:
+            self.plot_item.setYRange(self._y_min, self._y_max, padding=0)
+        finally:
+            self._programmatic_range_change = False
+            
+        print(f"Reset view: y-axis range set to [{self._y_min}, {self._y_max}], x-axis unchanged")
+        
+        # Update tick spacing for the current view
+        self._update_tick_spacing()
+    
+    def set_full_data(self, time_data, force_data_multi_channel):
+        """
+        Sets full data for post-acquisition viewing and switches to full data mode.
+        
+        Args:
+            time_data: 1D numpy array of time values
+            force_data_multi_channel: 2D numpy array [samples, channels] of force data
+        """
+        if time_data is not None and force_data_multi_channel is not None:
+            # Convert to relative time (seconds from start)
+            if len(time_data) > 0:
+                start_time = time_data[0]
+                self._full_data_time = time_data - start_time
+            else:
+                self._full_data_time = time_data
+            
+            self._full_data_forces = force_data_multi_channel
+            self._using_full_data = True
+            
+            # Update the plot with full data
+            self._update_plot_with_full_data()
+            
+            print(f"PlotHandler: Set full data with {len(time_data)} samples spanning {self._full_data_time[-1]:.2f} seconds")
+        else:
+            print("PlotHandler: Warning - received None data in set_full_data")
+    
+    def _update_plot_with_full_data(self):
+        """Updates the plot curves using the full data."""
+        if not self._using_full_data or self._full_data_time is None or self._full_data_forces is None:
+            return
+            
+        # Update curves based on current view mode
+        if self.current_view_mode == 'summed':
+            # Show summed channel
+            summed_forces = np.sum(self._full_data_forces, axis=1)
+            self.plot_curves[self.num_channels].setData(self._full_data_time, summed_forces)
+            
+            # Hide individual channels
+            for i in range(self.num_channels):
+                self.plot_curves[i].setData([], [])
+        else:
+            # Show individual channels
+            for i in range(self.num_channels):
+                self.plot_curves[i].setData(self._full_data_time, self._full_data_forces[:, i])
+            
+            # Hide summed channel
+            self.plot_curves[self.num_channels].setData([], [])
+            
+        print(f"PlotHandler: Updated plot with full data in {self.current_view_mode} mode") 
     
     def _remove_event_markers(self):
         """Removes all event markers from the plot."""

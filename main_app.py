@@ -280,6 +280,9 @@ class MainWindow(QMainWindow):
         self.update_status("Stopping acquisition...")
         self.daq_handler.stop_scan() # This will trigger status updates via signals
 
+        # Store the current y-axis maximum for the reset view functionality
+        self.plot_handler.store_acquisition_y_max()
+
         # Update button states (status update from DAQ handler might refine this)
         self.btn_start.setEnabled(True)
         self.btn_zero.setEnabled(True)
@@ -288,6 +291,9 @@ class MainWindow(QMainWindow):
         # Enable analysis/save only if some data was likely collected
         # A short delay might be needed for the last chunks to process
         QTimer.singleShot(200, self._check_enable_analysis_save) # Check after 200ms
+        
+        # Set full data in plot handler for post-acquisition viewing
+        QTimer.singleShot(300, self._set_full_data_in_plot) # Set after 300ms to ensure all data is processed
 
     def _check_enable_analysis_save(self):
         """Checks if data exists to enable analysis/save buttons."""
@@ -297,6 +303,15 @@ class MainWindow(QMainWindow):
         self.btn_save.setEnabled(has_data)
         if not has_data and not self.btn_start.isEnabled(): # If stopped but no data
              self.update_status("Acquisition stopped. No data collected.")
+    
+    def _set_full_data_in_plot(self):
+        """Sets full data in plot handler for post-acquisition viewing."""
+        time, force_multi = self.data_processor.get_full_data()
+        if time is not None and force_multi is not None and len(time) > 0:
+            self.plot_handler.set_full_data(time, force_multi)
+            self.update_status(f"Full data set in plot handler: {len(time)} samples over {time[-1] - time[0]:.2f} seconds.")
+        else:
+            self.update_status("No data available to set in plot handler.")
 
     @pyqtSlot(dict)
     def display_results(self, results_dict):

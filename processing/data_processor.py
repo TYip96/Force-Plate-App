@@ -12,6 +12,7 @@ while maintaining the exact same external interface.
 import numpy as np
 import time
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
+from scipy.signal import butter, filtfilt
 import config
 
 # Import the new modules
@@ -59,6 +60,18 @@ class DataProcessor(QObject):
         # Add real-time tracking
         self._last_real_time = None
         self._last_chunk_time = None
+        self._acquisition_start_time = None
+        
+        # Initialize Butterworth filter for plot display
+        nyquist = self.sample_rate / 2.0
+        fc = min(config.FILTER_CUTOFF, nyquist * 0.99)
+        self._filter_b, self._filter_a = butter(
+            config.FILTER_ORDER,
+            fc,
+            btype='low',
+            analog=False,
+            fs=self.sample_rate
+        )
 
     def _connect_module_signals(self):
         """Connect signals from internal modules to forward them through this class."""
@@ -111,6 +124,7 @@ class DataProcessor(QObject):
         # Reset real-time tracking
         self._last_real_time = None
         self._last_chunk_time = None
+        self._acquisition_start_time = None
         
         self.status_signal.emit("Data buffers and jump state cleared.")
 
@@ -128,6 +142,10 @@ class DataProcessor(QObject):
         # REAL-DAQ TIMING: measure actual callback interval
         now = time.time()
         self._last_real_time = now
+        
+        # Set acquisition start time on first chunk
+        if self._acquisition_start_time is None:
+            self._acquisition_start_time = now
         
         # Generate time stamps based on real wall-clock time
         num_samples = raw_data_chunk.shape[0]
@@ -149,8 +167,16 @@ class DataProcessor(QObject):
         # 3. Calculate Total Vertical Force (Fz) for detection
         fz_chunk_summed = np.sum(force_data_channels, axis=1)
 
-        # 4. Emit MULTI-CHANNEL data for Plotting
-        self.processed_data_signal.emit(time_chunk, force_data_channels)
+        # 4. Apply 50Hz filter to data for plotting
+        force_data_filtered = np.zeros_like(force_data_channels)
+        for ch in range(force_data_channels.shape[1]):
+            force_data_filtered[:, ch] = filtfilt(self._filter_b, self._filter_a, force_data_channels[:, ch])
+
+        # 5. Convert to relative time for plotting (seconds since start)
+        relative_time_chunk = time_chunk - self._acquisition_start_time
+        
+        # 6. Emit FILTERED MULTI-CHANNEL data for Plotting
+        self.processed_data_signal.emit(relative_time_chunk, force_data_filtered)
 
         # 5. Append to buffers
         self._buffer_manager.append_chunk(time_chunk, force_data_channels)

@@ -20,8 +20,9 @@ class CalibrationManager(QObject):
     
     # Define test phases as constants for clarity
     PHASE_WAITING = 0    # Waiting for person to step on plate
-    PHASE_CALIBRATING = 1  # Countdown for bodyweight measurement
-    PHASE_READY = 2      # Bodyweight measured, ready for jump
+    PHASE_WAITING_FOR_STABILITY = 1  # Person on plate, waiting for stability
+    PHASE_CALIBRATING = 2  # Countdown for bodyweight measurement
+    PHASE_READY = 3      # Bodyweight measured, ready for jump
     PHASE_COMPLETED = 4  # Jump completed, analyzing
     
     def __init__(self, calibration_duration=3):
@@ -40,6 +41,7 @@ class CalibrationManager(QObject):
         self.test_phase = self.PHASE_WAITING
         self._calibration_start_time = None
         self._calibration_force_buffer = []
+        self._stability_buffer = []  # Buffer for stability detection before calibration
         
         # Results
         self._estimated_body_weight = None
@@ -52,12 +54,13 @@ class CalibrationManager(QObject):
         self.test_phase = self.PHASE_WAITING
         self._calibration_start_time = None
         self._calibration_force_buffer = []
+        self._stability_buffer = []
         self._estimated_body_weight = None
         self._bw_calibration_std = None
         self._calibration_complete_time = None
         self._calibration_complete_index = None
         
-        self.calibration_status_signal.emit("Stand off the force plate", 0)
+        self.calibration_status_signal.emit("Step on the force plate", 0)
         
     def process_chunk(self, time_chunk, fz_chunk_summed, current_buffer_length):
         """
@@ -77,13 +80,43 @@ class CalibrationManager(QObject):
         # STATE: Waiting for person to step on the plate
         if self.test_phase == self.PHASE_WAITING:
             if mean_force > self._significant_force_threshold:
-                # Person stepped on the plate - start calibration
-                self.test_phase = self.PHASE_CALIBRATING
-                self._calibration_start_time = time_chunk[-1]
-                self._calibration_force_buffer = []
-                self.status_signal.emit("Person detected on force plate. Starting bodyweight calibration.")
-                self.calibration_status_signal.emit("Stand still for calibration", self._calibration_duration)
+                # Person stepped on the plate - wait for stability before starting timer
+                self.test_phase = self.PHASE_WAITING_FOR_STABILITY
+                self._stability_buffer = [fz_chunk_summed]
+                self.status_signal.emit("Person detected on force plate. Please stand still.")
+                self.calibration_status_signal.emit("Stand still to begin calibration", 0)
                 phase_changed = True
+                
+        # STATE: Waiting for person to stabilize before starting calibration timer
+        elif self.test_phase == self.PHASE_WAITING_FOR_STABILITY:
+            # Check if person is still on the plate
+            if mean_force < self._significant_force_threshold:
+                # Person stepped off - go back to waiting
+                self.test_phase = self.PHASE_WAITING
+                self._stability_buffer = []
+                self.status_signal.emit("Person stepped off. Step on the plate to begin.")
+                self.calibration_status_signal.emit("Step on force plate to begin test", 0)
+                phase_changed = True
+            else:
+                # Add to stability buffer
+                self._stability_buffer.append(fz_chunk_summed)
+                
+                # Check for stability once we have enough data
+                if len(self._stability_buffer) >= 3:  # Need at least 3 chunks (~100ms) for stability check
+                    # Keep only recent data for stability analysis
+                    recent_data = np.concatenate(self._stability_buffer[-10:]) if len(self._stability_buffer) > 10 else np.concatenate(self._stability_buffer)
+                    std_dev = np.std(recent_data)
+                    
+                    if std_dev <= 10:  # Person is stable - start calibration timer
+                        self.test_phase = self.PHASE_CALIBRATING
+                        self._calibration_start_time = time_chunk[-1]
+                        self._calibration_force_buffer = []
+                        self.status_signal.emit("Stability detected. Starting bodyweight calibration.")
+                        self.calibration_status_signal.emit("Stand still for calibration", self._calibration_duration)
+                        phase_changed = True
+                    else:
+                        # Still unstable - keep waiting
+                        self.calibration_status_signal.emit("Stand still to begin calibration", 0)
         
         # STATE: Calibrating bodyweight - countdown
         elif self.test_phase == self.PHASE_CALIBRATING:
@@ -127,7 +160,7 @@ class CalibrationManager(QObject):
                 self._calibration_complete_index = current_buffer_length - 1  # Index of the last sample in buffer
                 
                 self.status_signal.emit(f"Bodyweight calibration complete: {self._estimated_body_weight:.1f}N")
-                self.calibration_status_signal.emit(f"Calibration complete: {self._estimated_body_weight:.1f}N", 0)
+                self.calibration_status_signal.emit("Ready to jump!", 0)
                 self.calibration_complete_signal.emit(self._estimated_body_weight)
                 
                 # Move to ready state
