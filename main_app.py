@@ -12,7 +12,7 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QStatusBar, QTextEdit, QFileDialog,
-    QRadioButton, QButtonGroup, QFrame
+    QRadioButton, QButtonGroup, QFrame, QTabWidget
 )
 from PyQt6.QtCore import pyqtSlot, QTimer, Qt
 import logging
@@ -21,6 +21,7 @@ import config
 from hardware.daq_handler import DAQHandler
 from processing.data_processor import DataProcessor
 from ui.plot_handler import PlotHandler
+from ui.calibration_widget import CalibrationWidget
 
 logging.basicConfig(
     filename='force_plate_app.log',
@@ -47,10 +48,14 @@ class MainWindow(QMainWindow):
             self.show_error("Config validation error. See log.")
             sys.exit(1)
 
-        # --- Central Widget and Layout ---
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.main_layout = QHBoxLayout(self.central_widget) # Main horizontal layout
+        # --- Central Widget with Tabs ---
+        self.tab_widget = QTabWidget()
+        self.setCentralWidget(self.tab_widget)
+        
+        # Create main tab
+        self.main_tab = QWidget()
+        self.main_layout = QHBoxLayout(self.main_tab) # Main horizontal layout
+        self.tab_widget.addTab(self.main_tab, "Main")
 
         # --- Control Panel (Left Side) ---
         self.control_panel_layout = QVBoxLayout()
@@ -164,6 +169,19 @@ class MainWindow(QMainWindow):
         # --- Setup Plot ---
         # Setup plot *after* PlotHandler is created
         self.plot_handler.setup_plot(num_channels=config.NUM_CHANNELS)
+        
+        # --- Add Calibration Tab ---
+        self.calibration_widget = CalibrationWidget()
+        self.tab_widget.addTab(self.calibration_widget, "Calibration")
+        
+        # Connect calibration widget to receive data and handle calibration
+        self.calibration_widget.calibration_applied.connect(self.on_calibration_applied)
+        self.calibration_widget.zero_plate_requested.connect(self.zero_plate)
+        
+        # Apply saved calibration if available
+        if self.calibration_widget.current_n_per_volt != config.N_PER_VOLT:
+            self.data_processor.n_per_volt = self.calibration_widget.current_n_per_volt
+            self.update_status(f"Loaded calibration: N/V ratio = {self.calibration_widget.current_n_per_volt:.1f}")
 
         # --- Connect Signals and Slots ---
         self._connect_signals()
@@ -207,6 +225,9 @@ class MainWindow(QMainWindow):
         
         # Connect jump event markers signal to plot handler
         self.data_processor.jump_event_markers_signal.connect(self.plot_handler.add_event_markers)
+        
+        # Connect processed data to calibration widget for live readings
+        self.data_processor.processed_data_signal.connect(self.update_calibration_readings)
 
         # Update button states AFTER connections are made
         self.btn_start.setEnabled(True)
@@ -252,6 +273,10 @@ class MainWindow(QMainWindow):
         avg_offset = voltages_accum / N_SAMPLES
         self.data_processor.set_zero_offset(avg_offset)
         self.update_status(f"Zero offset acquired (averaged {N_SAMPLES} samples).")
+        
+        # Notify calibration widget if it exists
+        if hasattr(self, 'calibration_widget'):
+            self.calibration_widget.on_zero_complete()
 
     @pyqtSlot()
     def start_acquisition(self):
@@ -499,6 +524,34 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Error: {message}", 5000) # Show for 5 seconds
         print(f"Error: {message}") # Also print to console
 
+    @pyqtSlot(np.ndarray, np.ndarray)
+    def update_calibration_readings(self, time_data, force_data):
+        """Update calibration widget with current voltage and force readings."""
+        if len(time_data) > 0 and force_data.shape[0] > 0:
+            # Get the most recent values
+            latest_forces = force_data[-1]  # Last sample, all channels
+            total_force = np.sum(latest_forces)
+            
+            # Get the actual voltage data from data processor
+            # We need to add a method to get raw voltage
+            total_voltage = self.data_processor.get_latest_voltage_sum()
+            
+            # Update calibration widget
+            if total_voltage is not None:
+                self.calibration_widget.set_current_readings(total_voltage, total_force)
+    
+    @pyqtSlot(float, dict)
+    def on_calibration_applied(self, new_n_per_volt, calibration_data):
+        """Handle when new calibration is applied."""
+        # Update the data processor with new N/V ratio
+        self.data_processor.n_per_volt = new_n_per_volt
+        
+        # Update status
+        self.update_status(f"Calibration applied: New N/V ratio = {new_n_per_volt:.1f}")
+        
+        # Log calibration data
+        logging.info(f"Calibration applied: {calibration_data}")
+    
     def closeEvent(self, event):
         """Ensures the DAQ thread is stopped cleanly on exit."""
         self.update_status("Closing application...")

@@ -2,6 +2,65 @@
 
 All notable changes to the Force Plate App will be documented in this file.
 
+## [Unreleased] - 2025-07-07 18:45
+
+### Added
+- **Zero Plate button in calibration tab**: Users can now zero the force plate directly from the calibration tab
+  - Visual status indicator shows when plate is zeroed (red "Not zeroed" → green "✓ Zeroed")
+  - Confirmation dialog ensures users remove weight before zeroing
+  - Automatic feedback when zeroing is complete
+
+### Fixed
+- **Calibration startup issue**: N/V ratio from saved calibration now automatically applied on app startup
+- **UI clarity**: Added "zero-corrected" label to voltage display in calibration widget
+- **Documentation**: Enhanced docstrings to clarify calibration data flow (summed channels, zero-offset corrected)
+
+### Verified
+- **Calibration implementation review completed**:
+  - Multiple measurement functionality working correctly with CV% calculations
+  - Backward compatibility maintained for old calibration file format
+  - Zero offset correctly applied before N/V conversion
+  - Voltage readings properly summed across all channels
+  - Statistics and error calculations accurate
+  - Save/load functionality preserves all measurement data
+
+## [Unreleased] - 2025-07-07 
+
+### Enhanced
+- **Calibration system with multiple measurement capability**:
+  - **calibration_widget.py**: Comprehensive enhancement for repeatability assessment
+  - Added measurements per weight control (1-10 measurements, default 3)
+  - Expanded calibration table from 6 to 10 columns showing individual measurements plus statistics
+  - Implemented coefficient of variation (CV%) calculation with color coding for quality assessment
+  - Enhanced data structure from simple list to nested dictionary (weight -> measurements list)
+  - Updated calibration curve calculation to use averaged values while preserving individual measurements
+  - Added progress tracking and user feedback during measurement collection
+  - Backward compatibility maintained for existing single-measurement calibration files
+
+### Added
+- **Quality assessment features**:
+  - CV% calculation with color coding (>5% red, >2% yellow) for measurement consistency
+  - Error percentage display with color coding for calibration accuracy
+  - Real-time progress display showing measurement completion status per weight
+  - Enhanced table display with individual measurements and statistical summaries
+
+### Changed
+- **Data persistence improvements**:
+  - JSON save format enhanced with detailed statistics and measurement tracking
+  - Load function updated to handle both old (calibration_points) and new (calibration_weights) formats
+  - Export CSV includes individual measurements with comprehensive statistics
+
+### Technical Details
+- **Measurement workflow**: Sequential measurement collection per weight with automatic progress tracking
+- **Statistical analysis**: Mean, standard deviation, and CV% calculated per weight for quality control
+- **User experience**: Clear visual feedback through color-coded quality indicators and progress displays
+- **Data integrity**: Calibration curve uses averaged measurements for robust results while preserving raw data for analysis
+
+### Files Affected
+- `ui/calibration_widget.py`: Complete enhancement (~200 lines of modifications)
+- `tasks/todo.md`: Created project task documentation following CLAUDE.md workflow
+- `docs/CHANGELOG.md`: Updated with detailed change documentation
+
 ## [Unreleased] - 2025-07-06 17:55
 
 ### Added

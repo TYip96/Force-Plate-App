@@ -47,6 +47,9 @@ class DataProcessor(QObject):
 
         # Initialize zero offset
         self.zero_offset_v = np.zeros(self.num_channels)
+        
+        # Store latest voltage for calibration
+        self._latest_voltage_sum = None
 
         # Initialize specialized modules
         self._buffer_manager = BufferManager(sample_rate, num_channels)
@@ -160,6 +163,9 @@ class DataProcessor(QObject):
 
         # 1. Apply Zero Offset
         offset_corrected_data = raw_data_chunk - self.zero_offset_v
+        
+        # Store latest voltage sum for calibration (after zero offset)
+        self._latest_voltage_sum = np.sum(offset_corrected_data[-1])  # Sum of all channels, last sample
 
         # 2. Scale to Force (Newtons per channel)
         force_data_channels = offset_corrected_data * self.n_per_volt
@@ -294,3 +300,7 @@ class DataProcessor(QObject):
     def test_phase(self):
         """Get current test phase from calibration manager."""
         return self._calibration_manager.test_phase
+    
+    def get_latest_voltage_sum(self):
+        """Get the latest summed voltage reading for calibration."""
+        return self._latest_voltage_sum
