@@ -33,6 +33,7 @@ class CalibrationWidget(QWidget):
         self.current_n_per_volt = 327.0  # Default from config
         self.calibration_file = "calibration.json"
         self.is_zeroed = False  # Track if plate has been zeroed
+        self.is_daq_running = False  # Track if DAQ is acquiring data
         
         # Multiple measurement tracking
         self.current_weight_measurements = []  # List of (voltage, force) for current weight
@@ -260,9 +261,17 @@ class CalibrationWidget(QWidget):
         
         # Recording state
         self.is_recording = False
+        self.is_countdown = False
+        self.countdown_start_time = None
         self.recording_start_time = None
         self.recording_values = []
         self.recording_countdown = 3
+        
+        # Add instructions label
+        self.instruction_label = QLabel("To calibrate: 1) Zero the plate 2) Start acquisition on Main tab 3) Place weight and record")
+        self.instruction_label.setStyleSheet("font-size: 12px; color: #666666; padding: 10px;")
+        self.instruction_label.setWordWrap(True)
+        left_layout.insertWidget(0, self.instruction_label)
         
     def update_record_button_text(self):
         """Update the record button text based on current state."""
@@ -319,6 +328,7 @@ class CalibrationWidget(QWidget):
         """
         self.current_voltage = voltage
         self.current_force = force
+        self.is_daq_running = True  # Mark that we're receiving data
         
         # If recording, collect samples
         if self.is_recording:
@@ -333,8 +343,20 @@ class CalibrationWidget(QWidget):
         force_kg = self.current_force / 9.81
         self.force_label.setText(f"Force: {self.current_force:.1f} N ({force_kg:.2f} kg)")
         
-        # Update recording countdown if recording
-        if self.is_recording:
+        # Update countdown or recording
+        if self.is_countdown:
+            elapsed = datetime.now().timestamp() - self.countdown_start_time
+            remaining = 3 - elapsed
+            if remaining > 0:
+                self.record_btn.setText(f"Get ready... {remaining:.0f}s")
+            else:
+                # Countdown finished, start actual recording
+                self.is_countdown = False
+                self.is_recording = True
+                self.recording_start_time = datetime.now().timestamp()
+                self.recording_values = []
+                
+        elif self.is_recording:
             elapsed = datetime.now().timestamp() - self.recording_start_time
             remaining = 3 - elapsed
             if remaining > 0:
@@ -346,7 +368,26 @@ class CalibrationWidget(QWidget):
                 
     def start_recording(self):
         """Start recording a calibration point."""
-        if self.is_recording:
+        if self.is_recording or self.is_countdown:
+            return
+            
+        # Check if DAQ is running
+        if not self.is_daq_running:
+            QMessageBox.warning(self, "DAQ Not Running", 
+                              "Please start acquisition on the Main tab before recording calibration points.\n\n" +
+                              "Steps:\n" +
+                              "1. Go to Main tab\n" +
+                              "2. Click 'Start Acquisition'\n" + 
+                              "3. Return to Calibration tab\n" +
+                              "4. Place weight on plate\n" +
+                              "5. Click Record")
+            return
+            
+        # Check if plate is zeroed
+        if not self.is_zeroed:
+            QMessageBox.warning(self, "Plate Not Zeroed",
+                              "Please zero the plate before recording calibration points.\n\n" +
+                              "Remove all weight from the plate and click 'Zero Plate'.")
             return
             
         # Check if we're continuing measurements for an existing weight
@@ -371,14 +412,15 @@ class CalibrationWidget(QWidget):
             self.current_weight_measurements = []
             self.current_measurement_number = 0
             
-        self.is_recording = True
-        self.recording_start_time = datetime.now().timestamp()
-        self.recording_values = []
+        # Start countdown phase
+        self.is_countdown = True
+        self.countdown_start_time = datetime.now().timestamp()
         self.record_btn.setEnabled(False)
         
     def finish_recording(self):
         """Finish recording and add the calibration point."""
         self.is_recording = False
+        self.is_countdown = False
         self.record_btn.setEnabled(True)
         
         if len(self.recording_values) < 10:  # Need at least some samples
@@ -495,7 +537,14 @@ class CalibrationWidget(QWidget):
         """Calculate and display calibration results using averaged measurements."""
         if len(self.calibration_weights) < 2:
             self.new_ratio_label.setText("New N/V Ratio: Need at least 2 different weights")
+            self.r_squared_label.setText("R² Value: ---")
+            self.rmse_label.setText("RMSE: --- N")
+            self.warning_label.setText("")
             self.apply_btn.setEnabled(False)
+            # Clear the plot when insufficient data
+            self.scatter_plot.setData([], [])
+            self.fit_line.setData([], [])
+            self.ideal_line.setData([], [])
             return
             
         # Extract averaged data for each weight
@@ -742,11 +791,15 @@ class CalibrationWidget(QWidget):
     def load_calibration_data(self):
         """Load calibration data from JSON file."""
         if not os.path.exists(self.calibration_file):
+            print(f"Calibration file '{self.calibration_file}' not found")
+            # Try to create an empty calibration file for first-time users
+            self.create_default_calibration_file()
             return
             
         try:
             with open(self.calibration_file, 'r') as f:
                 data = json.load(f)
+            print(f"Successfully loaded calibration data from '{self.calibration_file}'")
                 
             self.current_n_per_volt = data.get('n_per_volt', 327.0)
             
@@ -779,8 +832,48 @@ class CalibrationWidget(QWidget):
             self.update_calibration_results()
             self.update_record_button_text()
             
+            # Show info about loaded data
+            num_weights = len(self.calibration_weights)
+            total_measurements = sum(len(m) for m in self.calibration_weights.values())
+            if num_weights > 0:
+                info_msg = f"Loaded {num_weights} weight(s) with {total_measurements} total measurement(s)"
+                if 'timestamp' in data:
+                    from datetime import datetime as dt
+                    try:
+                        timestamp = dt.fromisoformat(data['timestamp'])
+                        info_msg += f"\nLast saved: {timestamp.strftime('%Y-%m-%d %H:%M')}"
+                    except:
+                        pass
+                self.progress_label.setText(info_msg)
+                print(info_msg)
+            
         except Exception as e:
+            print(f"Error loading calibration data: {str(e)}")
             QMessageBox.warning(self, "Load Error", f"Failed to load calibration: {str(e)}")
+    
+    def create_default_calibration_file(self):
+        """Create a default calibration file with example data to help users get started."""
+        try:
+            # Create default calibration data with example measurements
+            default_data = {
+                'n_per_volt': 327.0,
+                'calibration_weights': {},
+                'weight_statistics': {},
+                'timestamp': datetime.now().isoformat(),
+                'r_squared': None,
+                'rmse': None,
+                'num_weights': 0,
+                'total_measurements': 0,
+                'measurements_per_weight': 3,
+                'note': 'This is a default calibration file. Add your own calibration points to improve accuracy.'
+            }
+            
+            with open(self.calibration_file, 'w') as f:
+                json.dump(default_data, f, indent=2)
+            print(f"Created default calibration file: {self.calibration_file}")
+            
+        except Exception as e:
+            print(f"Error creating default calibration file: {str(e)}")
             
     def export_csv(self):
         """Export calibration data to CSV file."""
@@ -851,3 +944,14 @@ class CalibrationWidget(QWidget):
         self.is_zeroed = True
         self.zero_status_label.setText("✓ Zeroed")
         self.zero_status_label.setStyleSheet("color: green;")
+        
+    def set_daq_status(self, is_running):
+        """Update DAQ running status."""
+        self.is_daq_running = is_running
+        if not is_running:
+            # Update instruction label to remind user
+            self.instruction_label.setStyleSheet("font-size: 12px; color: #cc0000; padding: 10px; font-weight: bold;")
+            self.instruction_label.setText("⚠️ DAQ is stopped. Start acquisition on Main tab before recording.")
+        else:
+            self.instruction_label.setStyleSheet("font-size: 12px; color: #00cc00; padding: 10px;")
+            self.instruction_label.setText("✓ DAQ is running. You can now record calibration points.")

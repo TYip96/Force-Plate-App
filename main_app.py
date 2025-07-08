@@ -298,6 +298,10 @@ class MainWindow(QMainWindow):
         self.btn_zero.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.btn_save.setEnabled(False)
+        
+        # Notify calibration widget that DAQ is running
+        if hasattr(self, 'calibration_widget'):
+            self.calibration_widget.set_daq_status(True)
 
     @pyqtSlot()
     def stop_acquisition(self):
@@ -319,6 +323,10 @@ class MainWindow(QMainWindow):
         
         # Set full data in plot handler for post-acquisition viewing
         QTimer.singleShot(300, self._set_full_data_in_plot) # Set after 300ms to ensure all data is processed
+        
+        # Notify calibration widget that DAQ has stopped
+        if hasattr(self, 'calibration_widget'):
+            self.calibration_widget.set_daq_status(False)
 
     def _check_enable_analysis_save(self):
         """Checks if data exists to enable analysis/save buttons."""
