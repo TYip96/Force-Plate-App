@@ -40,10 +40,123 @@ class DAQWorker(QObject):
 
         self._is_running = False
         self._mutex = QMutex()
+        
+        # Continuous acquisition parameters
+        self._use_continuous = True  # Flag to switch between modes
+        self._buffer_size_seconds = config.CONTINUOUS_BUFFER_SECONDS  # Size of circular buffer from config
+        self._last_index = 0  # Track last read position in circular buffer
 
     @pyqtSlot()
     def run(self):
-        # Use blocking finite scans with driver-allocated buffer handles
+        if self._use_continuous:
+            self._run_continuous()
+        else:
+            self._run_blocking()
+    
+    def _run_continuous(self):
+        """Run continuous background acquisition to eliminate gaps."""
+        with QMutexLocker(self._mutex):
+            self._is_running = True
+            
+        self.status_signal.emit(f"DAQ Worker started with CONTINUOUS background scanning (Board {self.board_num})")
+        
+        # Calculate buffer size for circular buffer (10 seconds of data)
+        total_buffer_samples = int(self._buffer_size_seconds * self.sample_rate) * self.num_channels
+        chunk_total_points = self.chunk_size * self.num_channels
+        
+        # Allocate memory for continuous scanning
+        memhandle = None
+        try:
+            memhandle = ul.scaled_win_buf_alloc(total_buffer_samples)
+            if not memhandle:
+                self.error_signal.emit("Failed to allocate buffer for continuous scanning")
+                return
+                
+            # Start continuous background scanning
+            ul.a_in_scan(
+                self.board_num,
+                0,
+                self.num_channels - 1,
+                total_buffer_samples,
+                self.sample_rate,
+                self.range,
+                memhandle,
+                ScanOptions.BACKGROUND | ScanOptions.CONTINUOUS | ScanOptions.SCALEDATA
+            )
+            
+            self.status_signal.emit("Continuous background scanning started successfully")
+            ct_buf = (c_double * chunk_total_points)()
+            self._last_index = 0
+            
+            # Main data collection loop
+            while True:
+                with QMutexLocker(self._mutex):
+                    if not self._is_running:
+                        break
+                        
+                # Get current scan status
+                status, cur_count, cur_index = ul.get_status(self.board_num, FunctionType.AIFUNCTION)
+                
+                # Calculate how much new data is available
+                if cur_index >= self._last_index:
+                    new_samples = cur_index - self._last_index
+                else:
+                    # Handle circular buffer wrap-around
+                    new_samples = (total_buffer_samples - self._last_index) + cur_index
+                    
+                # Process data if we have at least one chunk worth
+                if new_samples >= chunk_total_points:
+                    # Extract chunk from circular buffer
+                    if self._last_index + chunk_total_points <= total_buffer_samples:
+                        # Simple case: no wrap-around
+                        ul.scaled_win_buf_to_array(memhandle, ct_buf, self._last_index, chunk_total_points)
+                    else:
+                        # Handle wrap-around
+                        first_part = total_buffer_samples - self._last_index
+                        second_part = chunk_total_points - first_part
+                        temp_buf = (c_double * chunk_total_points)()
+                        
+                        # Copy first part from end of buffer
+                        ul.scaled_win_buf_to_array(memhandle, temp_buf, self._last_index, first_part)
+                        # Copy second part from beginning of buffer
+                        ul.scaled_win_buf_to_array(memhandle, temp_buf[first_part:], 0, second_part)
+                        ct_buf[:] = temp_buf[:]
+                        
+                    # Update last index (with wrap-around)
+                    self._last_index = (self._last_index + chunk_total_points) % total_buffer_samples
+                    
+                    # Convert to numpy and emit
+                    data_flat = np.ctypeslib.as_array(ct_buf)
+                    data_chunk = data_flat.reshape((self.chunk_size, self.num_channels))
+                    self.data_chunk_signal.emit(data_chunk)
+                else:
+                    # No full chunk available yet, calculate optimal wait time
+                    # Wait for approximately 1/4 of the time needed for a chunk
+                    samples_needed = chunk_total_points - new_samples
+                    wait_time = max(0.001, (samples_needed / (self.sample_rate * self.num_channels)) * 0.25)
+                    time.sleep(wait_time)  # Dynamic wait based on samples needed
+                    
+        except ULError as e:
+            self.error_signal.emit(f"DAQ continuous scan error: {e}")
+        except Exception as e:
+            self.error_signal.emit(f"Unexpected error in continuous scan: {e}")
+        finally:
+            # Stop background scanning
+            try:
+                ul.stop_background(self.board_num, FunctionType.AIFUNCTION)
+                self.status_signal.emit("Continuous scanning stopped")
+            except ULError:
+                pass
+                
+            # Free allocated memory
+            if memhandle:
+                ul.win_buf_free(memhandle)
+                
+            self.status_signal.emit("DAQ Worker thread stopping.")
+            self.finished.emit()
+    
+    def _run_blocking(self):
+        """Original blocking finite scan implementation."""
         with QMutexLocker(self._mutex):
             self._is_running = True
 
@@ -201,7 +314,9 @@ class DAQHandler(QObject):
 
         # Start the thread's event loop, which then triggers worker.run via started signal
         self._thread.start()
-        self.daq_status_signal.emit("DAQ worker thread requested to start.")
+        # Set thread priority for time-critical data acquisition
+        self._thread.setPriority(QThread.Priority.TimeCriticalPriority)
+        self.daq_status_signal.emit("DAQ worker thread requested to start with TimeCritical priority.")
 
     def stop_scan(self):
         """Signals the DAQ worker thread to stop."""

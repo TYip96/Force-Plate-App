@@ -154,6 +154,25 @@ class JumpAnalyzer(QObject):
                         calibration_std, calibration_complete_time, time_data_absolute
                     )
                     
+                    # Calculate contraction time (time from jump start to takeoff)
+                    if movement_start_idx_abs < len(time_data_absolute) and first_takeoff_idx < len(time_data_absolute):
+                        jump_start_time = time_data_absolute[movement_start_idx_abs]
+                        
+                        # Use precise interpolated takeoff time if available
+                        if hasattr(self, '_takeoff_idx_precise') and self._takeoff_idx_precise >= 0:
+                            takeoff_time = self._interpolated_index_to_wallclock_time(
+                                self._takeoff_idx_precise, time_data_absolute
+                            )
+                        else:
+                            takeoff_time = time_data_absolute[first_takeoff_idx]
+                        
+                        # Calculate contraction time in milliseconds
+                        contraction_time_s = takeoff_time - jump_start_time
+                        contraction_time_ms = contraction_time_s * 1000
+                        
+                        # Add to results
+                        results[f'Jump #{jump_number} Contraction Time (ms)'] = round(contraction_time_ms, 1)
+                    
                     # Emit event markers
                     self._emit_event_markers(
                         time_data_absolute, fz_filtered, jump_number,

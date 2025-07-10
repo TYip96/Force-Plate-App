@@ -18,7 +18,19 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(git push:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "WebFetch(domain:)",
+      "Bash(pdftotext:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:digilent.com)",
+      "Bash(md5sum:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(claude:*)",
+      "Bash(env)"
     ],
     "deny": []
   }
