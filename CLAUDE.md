@@ -89,7 +89,7 @@ The DAQ system uses blocking finite scans with the mcculw library:
 
 When working on this project, follow these specific rules:
 
-1. **Planning Phase**: First think through the problem, read the codebase for relevant files, and write a plan to `tasks/todo.md`.
+1. **Planning Phase**: First think through the problem, read the codebase for relevant files, and write a plan.
 
 2. **Task Management**: The plan should have a list of todo items that you can check off as you complete them.
 
@@ -97,6 +97,6 @@ When working on this project, follow these specific rules:
 
 4. **Simplicity First**: Make every task and code change you do as simple as possible. We want to avoid making any massive or complex changes. Every change should impact as little code as possible. Everything is about simplicity.
 
-5. **Review Documentation**: Finally, add a review section to the `tasks/todo.md` file with a summary of the changes you made and any other relevant information.
+5. **Review Documentation**: Finally, add a review section with a summary of the changes you made and any other relevant information.
 
-6. **Changelog Maintenance**: After completing any changes to the codebase, update the CHANGELOG.md file with a detailed summary of all modifications, including date/time stamps, files affected, and the impact of changes. This ensures a clear history of all code modifications.
+6. **Changelog Maintenance**: After completing any changes to the codebase, update the CHANGELOG.md file in the root directory (not docs/CHANGELOG.md) with a detailed summary of all modifications, including date/time stamps, files affected, and the impact of changes. This ensures a clear history of all code modifications.
