@@ -67,6 +67,7 @@ class DataProcessor(QObject):
         self._last_real_time = None
         self._last_chunk_time = None
         self._acquisition_start_time = None
+        self._total_samples_processed = 0
         
         # Add timing diagnostics
         self._timing_stats = {
@@ -144,6 +145,7 @@ class DataProcessor(QObject):
         self._last_real_time = None
         self._last_chunk_time = None
         self._acquisition_start_time = None
+        self._total_samples_processed = 0
         
         # Reset timing diagnostics
         self._timing_stats = {
@@ -191,24 +193,22 @@ class DataProcessor(QObject):
                 if jitter > 5.0:
                     self._timing_stats['jitter_warnings'] += 1
                     if self._timing_stats['jitter_warnings'] <= 10:  # Log first 10 warnings
-                        self.status_signal.emit(f"Timing jitter detected: {chunk_interval:.1f}ms interval (expected {expected_interval_ms:.1f}ms)")
+                        self.status_signal.emit(f"Delivery timing jitter: {chunk_interval:.1f}ms interval (expected {expected_interval_ms:.1f}ms)")
                 
                 # Detect gaps (if interval > 1.5x expected)
                 if chunk_interval > expected_interval_ms * 1.5:
                     gap_ms = chunk_interval - expected_interval_ms
                     self._timing_stats['gaps'].append(gap_ms)
                     self._timing_stats['gap_warnings'] += 1
-                    self.status_signal.emit(f"Data gap detected: {gap_ms:.1f}ms gap between chunks")
+                    self.status_signal.emit(f"Delivery delay detected: {gap_ms:.1f}ms delay between chunks")
         
-        # Generate time stamps based on real wall-clock time
+        # Generate timestamps based on sample count (not wall-clock delivery time)
         num_samples = raw_data_chunk.shape[0]
-        if self._last_chunk_time is None:
-            start_time = now - num_samples / self.sample_rate
-        else:
-            start_time = self._last_chunk_time
-            
-        time_chunk = np.linspace(start_time, now, num_samples, endpoint=True)
-        self._last_chunk_time = now
+        sample_start = self._total_samples_processed
+        self._total_samples_processed += num_samples
+        
+        # Calculate precise timestamps based on sample rate
+        time_chunk = self._acquisition_start_time + np.arange(sample_start, sample_start + num_samples) / self.sample_rate
         num_samples_in_chunk = num_samples
         
         # Calculate effective sample rate for this chunk
@@ -227,40 +227,8 @@ class DataProcessor(QObject):
         # 2. Scale to Force (Newtons per channel)
         force_data_channels = offset_corrected_data * self.n_per_volt
         
-        # Check if we need timing compensation
-        if hasattr(self, '_last_force_data') and self._last_force_data is not None and previous_real_time is not None:
-            actual_interval = now - previous_real_time
-            expected_interval = self._expected_chunk_interval
-            
-            # If significant gap detected (>1.5x expected interval), interpolate
-            if actual_interval > expected_interval * 1.5:
-                # Calculate how many samples should have been received
-                expected_samples = int(actual_interval * self.sample_rate)
-                actual_samples = num_samples
-                
-                if expected_samples > actual_samples:
-                    # We have a gap - interpolate to fill missing samples
-                    gap_samples = expected_samples - actual_samples
-                    self.status_signal.emit(f"Compensating for {gap_samples} missing samples via interpolation")
-                    
-                    # Create interpolated data to bridge the gap
-                    # Use last sample from previous chunk and first sample from current chunk
-                    for ch in range(self.num_channels):
-                        # Linear interpolation between last known and current values
-                        start_val = self._last_force_data[ch]
-                        end_val = force_data_channels[0, ch]
-                        
-                        # Create interpolated samples
-                        interpolated = np.linspace(start_val, end_val, gap_samples + 1)[:-1]
-                        
-                        # Prepend interpolated data to current chunk
-                        force_data_channels[:, ch] = np.concatenate([interpolated, force_data_channels[:, ch]])
-                    
-                    # Adjust timestamps accordingly
-                    gap_duration = gap_samples / self.sample_rate
-                    gap_times = np.linspace(previous_real_time, start_time, gap_samples, endpoint=False)
-                    time_chunk = np.concatenate([gap_times, time_chunk])
-                    num_samples_in_chunk = len(time_chunk)
+        # Note: Removed gap compensation - delivery timing jitter doesn't indicate missing samples
+        # Hardware DAQ samples at precise intervals regardless of Python delivery timing
         
         # Store last sample for next iteration
         if force_data_channels.shape[0] > 0:

@@ -93,28 +93,6 @@ class MainWindow(QMainWindow):
         
         self.control_panel_layout.addWidget(self.calibration_frame)
         self.control_panel_layout.addWidget(self.separator)
-        
-        # Timing Statistics Frame
-        self.timing_frame = QFrame()
-        self.timing_frame.setFrameStyle(QFrame.Shape.Box)
-        self.timing_layout = QVBoxLayout(self.timing_frame)
-        
-        self.timing_title = QLabel("Timing Diagnostics")
-        self.timing_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.timing_title.setStyleSheet("font-weight: bold;")
-        
-        self.timing_interval_label = QLabel("Avg Interval: --")
-        self.timing_jitter_label = QLabel("Max Jitter: --")
-        self.timing_rate_label = QLabel("Sample Rate: --")
-        self.timing_warnings_label = QLabel("Warnings: --")
-        
-        self.timing_layout.addWidget(self.timing_title)
-        self.timing_layout.addWidget(self.timing_interval_label)
-        self.timing_layout.addWidget(self.timing_jitter_label)
-        self.timing_layout.addWidget(self.timing_rate_label)
-        self.timing_layout.addWidget(self.timing_warnings_label)
-        
-        self.control_panel_layout.addWidget(self.timing_frame)
         self.control_panel_layout.addSpacing(10)
 
         # Buttons
@@ -215,10 +193,6 @@ class MainWindow(QMainWindow):
         # Keep last displayed results so we can update braking later
         self._last_results = {}
         
-        # Initialize timing statistics update timer
-        self.timing_update_timer = QTimer(self)
-        self.timing_update_timer.timeout.connect(self.update_timing_display)
-        self.timing_update_timer.setInterval(500)  # Update every 500ms
 
     def _connect_signals(self):
         # Button Clicks
@@ -321,8 +295,6 @@ class MainWindow(QMainWindow):
         self.plot_handler.clear_plot()
         self.daq_handler.start_scan()
         
-        # Start timing statistics updates
-        self.timing_update_timer.start()
 
         # Update button states
         self.btn_start.setEnabled(False)
@@ -340,8 +312,6 @@ class MainWindow(QMainWindow):
         self.update_status("Stopping acquisition...")
         self.daq_handler.stop_scan() # This will trigger status updates via signals
         
-        # Stop timing statistics updates
-        self.timing_update_timer.stop()
 
         # Store the current y-axis maximum for the reset view functionality
         self.plot_handler.store_acquisition_y_max()
@@ -578,28 +548,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Error: {message}", 5000) # Show for 5 seconds
         print(f"Error: {message}") # Also print to console
     
-    def update_timing_display(self):
-        """Updates the timing statistics display with current values from data processor."""
-        if hasattr(self, 'data_processor') and self.data_processor:
-            stats = self.data_processor.get_timing_statistics()
-            
-            # Update labels with formatted values
-            self.timing_interval_label.setText(f"Avg Interval: {stats['avg_interval_ms']:.1f} ms")
-            self.timing_jitter_label.setText(f"Max Jitter: {stats['max_jitter_ms']:.1f} ms")
-            self.timing_rate_label.setText(f"Sample Rate: {stats['avg_sample_rate']:.0f} Hz")
-            
-            # Update warnings with color coding
-            total_warnings = stats['jitter_warnings'] + stats['gap_warnings']
-            warning_text = f"Warnings: {total_warnings} (J:{stats['jitter_warnings']}, G:{stats['gap_warnings']})"
-            self.timing_warnings_label.setText(warning_text)
-            
-            # Color code warnings
-            if total_warnings == 0:
-                self.timing_warnings_label.setStyleSheet("color: green;")
-            elif total_warnings < 10:
-                self.timing_warnings_label.setStyleSheet("color: orange;")
-            else:
-                self.timing_warnings_label.setStyleSheet("color: red;")
 
     @pyqtSlot(np.ndarray, np.ndarray)
     def update_calibration_readings(self, time_data, force_data):

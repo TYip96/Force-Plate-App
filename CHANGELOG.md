@@ -1,5 +1,89 @@
 # CHANGELOG
 
+## [Unreleased] - 2025-01-12 21:05
+
+### Fixed
+- **Calibration Plot Visualization**: Fixed calibration plot to properly show calibration errors
+  - Plot now recalculates forces from stored voltages using current N/V factor
+  - Shows actual vs measured force relationship (not just stored values)
+  - Added historical N/V factor (327.0) display in plot title and table header
+  - Plot title clarified: "Data recorded at 327.0 N/V, plot reflects newly calibrated 330.3 N/V"
+  - Plot now correctly shows calibration slope deviation from ideal 1:1 line
+  - Verified R² calculation is correct (uses averaged voltages per weight)
+  - Files affected: ui/calibration_widget.py
+  - The fix reveals true calibration accuracy by comparing voltages to expected forces
+
+## [Unreleased] - 2025-07-13 17:30
+
+### Fixed
+- **Calibration Value Consistency**: Eliminated confusion about N/V calibration factor
+  - Updated config.py to use calibrated value 330.31 N/V instead of default 327.0
+  - Updated all documentation (CLAUDE.md, docs/README.md) to reflect correct calibration
+  - Updated calibration widget fallback values to match calibrated value
+  - Files affected: config.py, CLAUDE.md, docs/README.md, ui/calibration_widget.py
+  - This ensures the actual calibrated value being used (330.31) is clearly documented everywhere
+
+## [Unreleased] - 2025-07-13 15:45
+
+### Clarified
+- **Hardware timing documentation**: Major clarification after USB-1408FS-Plus documentation review
+  - Confirmed DAQ uses "hardware pacing with internal clock" for exact 1000 Hz sampling
+  - The 1000 Hz rate is NOT an assumption - it's hardware-enforced by the DAQ's internal clock
+  - Sample-count-based timestamps accurately reconstruct actual hardware sampling times
+  - Updated TIMING_ANALYSIS.md with new "Hardware Pacing Clarification" section
+  - Updated CLAUDE.md to change "Critical Timing Assumptions" to "Critical Timing Information"
+  - Files affected: TIMING_ANALYSIS.md, CLAUDE.md
+
+## [Unreleased] - 2025-07-13
+
+### Removed
+- **UI Timing Diagnostics Box**: Removed misleading "Sample Rate" display from the UI
+  - The display showed delivery rate (e.g., "1223 Hz") not actual hardware sampling rate
+  - This was confusing users about system performance
+  - Timing statistics are still tracked internally for diagnostic logging
+  - Files affected: main_app.py (removed timing_frame, timing labels, update_timing_display method)
+
+### Updated
+- **TIMING_ANALYSIS.md**: Added comprehensive additional findings from code analysis
+  - Documented continuous vs blocking DAQ modes
+  - Clarified mcculw library limitations (no hardware timestamps)
+  - Noted processing performance tracking capabilities
+  - Updated conclusion with current system status after fixes
+  - Files affected: TIMING_ANALYSIS.md (added "Additional Findings from Code Analysis" section)
+
+### Added
+- **Critical timing assumption documentation**: Added explicit 1000 Hz sampling assumption to CLAUDE.md
+  - Documented that timestamps are based on sample count, not wall-clock time
+  - Clarified that mcculw provides no hardware timestamps
+  - Added recommendation for external timing validation for absolute accuracy needs
+  - Files affected: CLAUDE.md (added "Critical Timing Assumptions" subsection)
+
+## [Unreleased] - 2025-07-12 18:30
+
+### Updated
+- **CLAUDE.md documentation**: Updated architecture section to reflect current codebase structure
+  - Added organized module hierarchy: Core, Hardware, Processing, UI, and Validation layers
+  - Documented ui/calibration_widget.py component for N/V ratio calibration
+  - Added validation/ directory containing comparison analysis against reference equipment
+  - Improved clarity of module organization and responsibilities
+  - Files affected: CLAUDE.md (architecture section restructured)
+
+## [Unreleased] - 2025-07-12 17:45
+
+### Fixed
+- **Critical timing accuracy bug**: Fixed fundamental timestamp calculation error that corrupted all jump measurements
+  - Replaced wall-clock delivery time with sample-count-based timing for precise timestamps
+  - Eliminated 18% time compression/expansion errors caused by delivery timing jitter (409ms vs 500ms chunks)
+  - Removed artificial data interpolation that was adding fake samples for delivery delays
+  - All jump calculations (flight time, velocity, height) now use accurate hardware-based timing
+  - Changed logging from "Timing jitter" to "Delivery timing jitter" to clarify it doesn't affect sample accuracy
+
+### Reverted
+- **Sub-chunking plot optimization**: Reverted changes that caused excessive plot display delay
+  - Removed sub-chunk splitting logic that created sluggish plot updates
+  - Restored original 60 FPS plot update timer for smooth visualization
+  - Reverted to efficient deque-based ring buffers
+
 ## [Unreleased] - 2025-07-10 11:00
 
 ### Fixed

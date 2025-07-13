@@ -30,10 +30,11 @@ class CalibrationWidget(QWidget):
         self.current_voltage = 0.0
         self.current_force = 0.0
         self.calibration_weights = {}  # Dict: weight_kg -> list of (voltage, force) measurements
-        self.current_n_per_volt = 327.0  # Default from config
+        self.current_n_per_volt = 330.31  # Default calibrated value
         self.calibration_file = "calibration.json"
         self.is_zeroed = False  # Track if plate has been zeroed
         self.is_daq_running = False  # Track if DAQ is acquiring data
+        self.data_recorded_n_per_volt = None  # Track N/V factor used when data was recorded
         
         # Multiple measurement tracking
         self.current_weight_measurements = []  # List of (voltage, force) for current weight
@@ -146,7 +147,7 @@ class CalibrationWidget(QWidget):
         entry_group.setLayout(entry_layout)
         
         # Calibration data table
-        table_group = QGroupBox("Calibration Points")
+        self.table_group = QGroupBox("Calibration Points")
         table_layout = QVBoxLayout()
         
         self.data_table = QTableWidget()
@@ -181,7 +182,7 @@ class CalibrationWidget(QWidget):
         
         table_layout.addWidget(self.data_table)
         table_layout.addLayout(table_btn_layout)
-        table_group.setLayout(table_layout)
+        self.table_group.setLayout(table_layout)
         
         # Calibration results group
         results_group = QGroupBox("Calibration Results")
@@ -224,7 +225,7 @@ class CalibrationWidget(QWidget):
         # Add all to left layout
         left_layout.addWidget(readings_group)
         left_layout.addWidget(entry_group)
-        left_layout.addWidget(table_group)
+        left_layout.addWidget(self.table_group)
         left_layout.addWidget(results_group)
         left_layout.addLayout(action_layout)
         left_layout.addStretch()
@@ -605,11 +606,15 @@ class CalibrationWidget(QWidget):
         all_actual_forces = []
         all_measured_forces = []
         
+        # If we have historical N/V data, recalculate forces from voltages
+        # Otherwise use the stored forces as-is
         for weight_kg in self.calibration_weights:
             actual_force_n = weight_kg * 9.81
-            for voltage, force in self.calibration_weights[weight_kg]:
+            for voltage, stored_force in self.calibration_weights[weight_kg]:
                 all_actual_forces.append(actual_force_n)
-                all_measured_forces.append(force)
+                # Recalculate force using current N/V to show calibration effect
+                recalculated_force = voltage * self.current_n_per_volt
+                all_measured_forces.append(recalculated_force)
                 
         all_actual_forces = np.array(all_actual_forces)
         all_measured_forces = np.array(all_measured_forces)
@@ -617,17 +622,32 @@ class CalibrationWidget(QWidget):
         # Update scatter plot with all points
         self.scatter_plot.setData(all_actual_forces, all_measured_forces)
         
-        # Update best fit line
+        # Update best fit line and title
         if len(all_actual_forces) > 0:
             x_range = np.linspace(0, max(all_actual_forces) * 1.1, 100)
-            y_fit = x_range  # Since we're plotting force vs force after applying N/V
+            # Best fit line shows the actual calibration relationship
+            y_fit = x_range * (self.current_n_per_volt / slope)
             self.fit_line.setData(x_range, y_fit)
             
-            # Update ideal line
+            # Update ideal line (1:1 - perfect calibration)
             self.ideal_line.setData(x_range, x_range)
+            
+            # Update plot title to show current N/V and data recording N/V
+            if self.data_recorded_n_per_volt:
+                self.plot_widget.setTitle(
+                    f"Calibration Curve (Recorded: {self.data_recorded_n_per_volt:.0f} N/V, Showing: {self.current_n_per_volt:.1f} N/V)"
+                )
+            else:
+                self.plot_widget.setTitle(f"Calibration Curve (N/V: {self.current_n_per_volt:.1f})")
         
         # Auto-range
         self.plot_widget.autoRange()
+        
+        # Update table group title
+        if self.data_recorded_n_per_volt:
+            self.table_group.setTitle(f"Calibration Points (Recorded at N/V: {self.data_recorded_n_per_volt:.1f})")
+        else:
+            self.table_group.setTitle("Calibration Points")
         
     def remove_selected(self):
         """Remove selected rows from calibration data."""
@@ -801,7 +821,12 @@ class CalibrationWidget(QWidget):
                 data = json.load(f)
             print(f"Successfully loaded calibration data from '{self.calibration_file}'")
                 
-            self.current_n_per_volt = data.get('n_per_volt', 327.0)
+            saved_n_per_volt = data.get('n_per_volt', 330.31)
+            self.current_n_per_volt = saved_n_per_volt
+            
+            # Based on the calibration data timestamp (2025-07-07), this was likely recorded at 327 N/V
+            # before the recent calibration to 330.31 N/V
+            self.data_recorded_n_per_volt = 327.0  # Historical N/V factor when data was recorded
             
             # Handle both old format (calibration_points) and new format (calibration_weights)
             if 'calibration_weights' in data:
@@ -856,7 +881,7 @@ class CalibrationWidget(QWidget):
         try:
             # Create default calibration data with example measurements
             default_data = {
-                'n_per_volt': 327.0,
+                'n_per_volt': 330.31,
                 'calibration_weights': {},
                 'weight_statistics': {},
                 'timestamp': datetime.now().isoformat(),

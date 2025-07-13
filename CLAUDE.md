@@ -10,15 +10,26 @@ This is a Python-based force plate application for real-time data acquisition, p
 
 The application follows a modular architecture with clear separation of concerns:
 
+### Core Components
 - **main_app.py**: Main application window and GUI controller that orchestrates all components
-- **daq_handler.py**: Hardware interface for DAQ operations using threaded data acquisition
-- **data_processor.py**: Main data processing coordinator (facade pattern)
-- **buffer_manager.py**: Memory-efficient circular buffers for data storage
-- **calibration_manager.py**: Bodyweight calibration state machine
-- **jump_detector.py**: Real-time jump detection during acquisition
-- **jump_analyzer.py**: Post-jump analysis and metrics calculation
-- **plot_handler.py**: Live plotting and visualization using PyQtGraph
 - **config.py**: Centralized configuration constants for hardware and analysis settings
+
+### Hardware Layer
+- **hardware/daq_handler.py**: Hardware interface for DAQ operations using threaded data acquisition
+
+### Processing Layer
+- **processing/data_processor.py**: Main data processing coordinator (facade pattern)
+- **processing/buffer_manager.py**: Memory-efficient circular buffers for data storage
+- **processing/calibration_manager.py**: Bodyweight calibration state machine
+- **processing/jump_detector.py**: Real-time jump detection during acquisition
+- **processing/jump_analyzer.py**: Post-jump analysis and metrics calculation
+
+### UI Layer
+- **ui/plot_handler.py**: Live plotting and visualization using PyQtGraph
+- **ui/calibration_widget.py**: Interactive N/V ratio calibration interface for force plate calibration
+
+### Validation Tools
+- **validation/**: Directory containing validation analysis scripts comparing against reference equipment
 
 ### Key Data Flow
 1. DAQ hardware → DAQHandler (threaded) → DataProcessor
@@ -54,7 +65,7 @@ All hardware and analysis parameters are centralized in `config.py`:
 Key configuration constants:
 - `SAMPLE_RATE`: 1000 Hz per channel
 - `NUM_CHANNELS`: 4 analog input channels
-- `N_PER_VOLT`: 327.0 N/V calibration factor
+- `N_PER_VOLT`: 330.31 N/V calibration factor (calibrated 2025-07-07)
 - `FILTER_CUTOFF`: 50 Hz low-pass filter
 - `BODYWEIGHT_THRESHOLD_N`: 20N for flight detection
 
@@ -68,11 +79,22 @@ The application performs sophisticated real-time jump analysis:
 
 ## Hardware Interface
 
-The DAQ system uses blocking finite scans with the mcculw library:
+The DAQ system uses continuous background scanning with the mcculw library:
 - Supports differential input mode with ±10V range
-- Thread-safe data acquisition using QThread
+- Thread-safe data acquisition using QThread with circular buffers
 - Automatic buffer management and error handling
 - Real-time voltage-to-force conversion
+
+### Critical Timing Information
+
+**The DAQ hardware samples at exactly 1000 Hz using hardware pacing with internal clock.** This is fundamental to all timing calculations:
+- The USB-1408FS-Plus has an internal hardware clock that triggers sampling at precise 1ms intervals
+- Timestamps are reconstructed based on sample count, which accurately reflects hardware sampling times
+- No hardware timestamps are available through the mcculw library (not needed due to hardware pacing)
+- Delivery timing variations (when Python retrieves data) do not affect actual sample timing
+- The hardware clock ensures precise, consistent timing for jump analysis
+
+The hardware-enforced sampling rate means external timing validation is not necessary for typical force plate applications.
 
 ## Development Notes
 

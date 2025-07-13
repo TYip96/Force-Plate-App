@@ -8,7 +8,7 @@ A sophisticated Python-based application for real-time force plate data acquisit
 - High-speed data acquisition at 1000 Hz per channel
 - 4-channel analog input with ±10V range
 - Thread-safe DAQ operations using PyQt6 QThread
-- Automatic voltage-to-force conversion (327.0 N/V calibration)
+- Automatic voltage-to-force conversion (330.31 N/V calibration)
 
 ### Advanced Jump Analysis
 - **Bodyweight Calibration**: 3-second standing period for baseline establishment
@@ -83,7 +83,7 @@ Key parameters can be modified in `config.py`:
 - **Sample Rate**: 1000 Hz (default)
 - **Channels**: 4 analog inputs
 - **Filter Cutoff**: 50 Hz low-pass filter
-- **Force Calibration**: 327.0 N/V conversion factor
+- **Force Calibration**: 330.31 N/V conversion factor (calibrated 2025-07-07)
 - **Detection Threshold**: 20N for flight phase detection
 
 ## Project Architecture

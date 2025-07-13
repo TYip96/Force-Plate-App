@@ -13,8 +13,8 @@ MCC_VOLTAGE_RANGE = ULRange.BIP10VOLTS
 # Calibration
 # Range: 0-333.333 kg per channel -> 0 - (333.333 * 9.81) N per channel = 3270 N per channel
 # Voltage: 0-10 V per channel
-# Sensitivity: 327.0 N/V per channel
-N_PER_VOLT = 327.0 # N/V per channel
+# Sensitivity: 330.31 N/V per channel (calibrated value from calibration.json)
+N_PER_VOLT = 330.31 # N/V per channel (calibrated 2025-07-07)
 
 # Analysis Settings
 GRAVITY = 9.81 # m/s^2
@@ -32,7 +32,7 @@ CONTINUOUS_BUFFER_SECONDS = 10  # Size of circular buffer for continuous acquisi
 TIMING_JITTER_THRESHOLD_MS = 5.0  # Threshold for detecting timing jitter (milliseconds)
 
 # Plotting Settings
-PLOT_WINDOW_DURATION_S = 5 # Show the last 5 seconds of data on the live plot 
+PLOT_WINDOW_DURATION_S = 5 # Duration of plot window in seconds 
 
 # Initial Y-axis maximum for live plot (N)
 PLOT_Y_AXIS_INITIAL_MAX = 3000.0 # Increased for better scaling with higher force values 

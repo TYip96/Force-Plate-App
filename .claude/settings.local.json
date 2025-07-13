@@ -30,7 +30,8 @@
       "Bash(wc:*)",
       "Bash(cat:*)",
       "Bash(claude:*)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(pip show:*)"
     ],
     "deny": []
   }
