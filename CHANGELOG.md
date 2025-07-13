@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [Unreleased] - 2025-07-13
+
+### Updated
+- **Documentation Update**: Updated docs/README.md to reflect current architecture
+  - Restructured architecture section to match layer-based organization from CLAUDE.md
+  - Added Hardware, Processing, and UI layer organization
+  - Added missing UI component (calibration_widget.py) to architecture description
+  - Added validation tools directory to project structure
+  - Added critical timing information about DAQ hardware pacing (1000 Hz with internal clock)
+  - Updated hardware specification to explicitly mention USB-1408FS-Plus
+  - Files affected: docs/README.md
+
 ## [Unreleased] - 2025-01-12 21:05
 
 ### Fixed

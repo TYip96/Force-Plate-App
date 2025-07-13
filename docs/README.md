@@ -33,7 +33,7 @@ A sophisticated Python-based application for real-time force plate data acquisit
 ### System Requirements
 - Python 3.8 or higher
 - Windows OS (required for mcculw DAQ library)
-- Compatible DAQ hardware (tested with MCC USB devices)
+- Compatible DAQ hardware (tested with USB-1408FS-Plus)
 
 ### Dependencies
 - **PyQt6**: GUI framework and threading
@@ -88,26 +88,33 @@ Key parameters can be modified in `config.py`:
 
 ## Project Architecture
 
-The application follows a modular, thread-safe architecture with specialized components:
+The application follows a modular architecture with clear separation of concerns:
 
-- **`main_app.py`**: Main application window and GUI controller
-- **`daq_handler.py`**: Hardware interface for DAQ operations (threaded)
-- **`data_processor.py`**: Main data processing coordinator (facade pattern)
-- **`buffer_manager.py`**: Memory-efficient circular buffers for data storage
-- **`calibration_manager.py`**: Bodyweight calibration state machine
-- **`jump_detector.py`**: Real-time jump detection during acquisition
-- **`jump_analyzer.py`**: Post-jump analysis and metrics calculation
-- **`plot_handler.py`**: Live plotting and visualization using PyQtGraph
-- **`config.py`**: Centralized configuration constants
+### Core Components
+- **`main_app.py`**: Main application window and GUI controller that orchestrates all components
+- **`config.py`**: Centralized configuration constants for hardware and analysis settings
 
-### Data Flow
-1. DAQ Hardware → DAQHandler (QThread) → DataProcessor
-2. DataProcessor processes raw data and coordinates:
-   - BufferManager (stores processed data)
-   - CalibrationManager (manages calibration state)
-   - JumpDetector (detects jumps when calibration ready)
-   - JumpAnalyzer (analyzes detected jumps)
-3. Results → GUI Display via PyQt6 signals/slots
+### Hardware Layer
+- **`hardware/daq_handler.py`**: Hardware interface for DAQ operations using threaded data acquisition
+
+### Processing Layer
+- **`processing/data_processor.py`**: Main data processing coordinator (facade pattern)
+- **`processing/buffer_manager.py`**: Memory-efficient circular buffers for data storage
+- **`processing/calibration_manager.py`**: Bodyweight calibration state machine
+- **`processing/jump_detector.py`**: Real-time jump detection during acquisition
+- **`processing/jump_analyzer.py`**: Post-jump analysis and metrics calculation
+
+### UI Layer
+- **`ui/plot_handler.py`**: Live plotting and visualization using PyQtGraph
+- **`ui/calibration_widget.py`**: Interactive N/V ratio calibration interface for force plate calibration
+
+### Validation Tools
+- **`validation/`**: Directory containing validation analysis scripts comparing against reference equipment
+
+### Key Data Flow
+1. DAQ hardware → DAQHandler (threaded) → DataProcessor
+2. DataProcessor coordinates BufferManager, CalibrationManager, JumpDetector, and JumpAnalyzer
+3. All components communicate via PyQt6 signals/slots for thread safety
 
 ## Technical Details
 
@@ -116,6 +123,14 @@ The application follows a modular, thread-safe architecture with specialized com
 - **Single Responsibility**: Each module handles one specific concern
 - **Better Testability**: Smaller, focused components are easier to test
 - **Improved Maintainability**: 74% reduction in main processing file complexity
+
+### Critical Timing Information
+**The DAQ hardware samples at exactly 1000 Hz using hardware pacing with internal clock.** This is fundamental to all timing calculations:
+- The USB-1408FS-Plus has an internal hardware clock that triggers sampling at precise 1ms intervals
+- Timestamps are reconstructed based on sample count, which accurately reflects hardware sampling times
+- No hardware timestamps are available through the mcculw library (not needed due to hardware pacing)
+- Delivery timing variations (when Python retrieves data) do not affect actual sample timing
+- The hardware clock ensures precise, consistent timing for jump analysis
 
 ### Jump Analysis Algorithm
 - **Phase Detection**: Monitors force threshold crossings to identify jump phases
